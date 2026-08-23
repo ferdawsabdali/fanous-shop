@@ -2090,10 +2090,10 @@ $('connectCloud').onclick = async () => {
             alert(result.pulled ? 'اتصال موفق! داده‌های ابری بارگذاری شد.' : 'اتصال موفق! داده‌های محلی به ابر ارسال شد.');
             location.reload();
         } else {
-            alert('خطا در اتصال: ' + (result.error || 'نامشخص'));
+            alert('خطا در اتصال:\n' + (result.error || 'نامشخص') + '\n\nلطفاً بررسی کنید:\n۱. آدرس پروژه: فقط https://xxx.supabase.co (بدون /rest/v1)\n۲. کلید عمومی: anon public (شروع با eyJ...)\n۳. جدول shop_data ساخته شده باشد');
         }
     } catch (e) {
-        alert('خطا در اتصال: ' + e.message);
+        alert('خطا در اتصال:\n' + e.message + '\n\nلطفاً بررسی کنید:\n۱. آدرس پروژه: فقط https://xxx.supabase.co (بدون /rest/v1)\n۲. کلید عمومی: anon public (شروع با eyJ...)\n۳. جدول shop_data ساخته شده باشد');
     }
     $('connectCloud').disabled = false;
     $('connectCloud').textContent = '☁️ اتصال به ابر';

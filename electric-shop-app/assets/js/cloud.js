@@ -169,10 +169,18 @@ const CloudSync = {
         }
     },
 
+    _normalizeSBUrl(url) {
+        // Strip /rest/v1 and trailing slashes so both formats work:
+        //   https://xxx.supabase.co          ← correct
+        //   https://xxx.supabase.co/rest/v1  ← also accepted
+        return url.replace(/\/rest\/v1\/?$/, '').replace(/\/+$/, '');
+    },
+
     /* ========== Supabase REST API ========== */
     async _pushSB(data, ts) {
         const c = this.cfg();
-        const resp = await fetch(c.supabaseUrl + '/rest/v1/shop_data', {
+        const baseUrl = this._normalizeSBUrl(c.supabaseUrl);
+        const resp = await fetch(baseUrl + '/rest/v1/shop_data', {
             method: 'POST',
             headers: {
                 'apikey': c.supabaseKey,
@@ -195,7 +203,8 @@ const CloudSync = {
 
     async _pullSB() {
         const c = this.cfg();
-        const url = c.supabaseUrl + '/rest/v1/shop_data?shop_id=eq.'
+        const baseUrl = this._normalizeSBUrl(c.supabaseUrl);
+        const url = baseUrl + '/rest/v1/shop_data?shop_id=eq.'
             + encodeURIComponent(c.shopId) + '&select=data,updated_at';
         const resp = await fetch(url, {
             headers: {
