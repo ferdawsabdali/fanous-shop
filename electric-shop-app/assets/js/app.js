@@ -2112,7 +2112,7 @@ $('forceSyncCloud').onclick = async () => {
     try {
         await CloudSync.push();
         const changed = await CloudSync.forcePull();
-        alert(changed ? 'همگام‌سازی کامل شد — داده‌های جدیدی از ابر دریافت شد.' : 'همگام‌سازی کامل شد — داده‌ها به‌روز است.');
+        if (!changed) CloudSync._showSyncNotification('✅ داده‌ها به‌روز است');
     } catch (e) {
         alert('خطا در همگام‌سازی: ' + e.message);
     }

@@ -3,9 +3,29 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <meta http-equiv="Cache-Control" content="no-cache, no-store, must-revalidate">
+    <meta http-equiv="Pragma" content="no-cache">
+    <meta http-equiv="Expires" content="0">
     <title>لوازم برق و صنعت فانوس</title>
-    <link rel="stylesheet" href="assets/css/style.css">
+    <link rel="stylesheet" href="assets/css/style.css?v=3">
     <link href="https://cdn.jsdelivr.net/gh/rastikerdar/vazirmatn@v33.003/Vazirmatn-font-face.css" rel="stylesheet">
+    <script>
+    /* Cache-bust: force reload if cached version is old */
+    (function(){
+        var V=3;
+        try{
+            var s=localStorage.getItem('_fanous_v');
+            if(s && parseInt(s)<V){
+                localStorage.setItem('_fanous_v',V);
+                /* Clear any service worker caches */
+                if('caches' in window){ caches.keys().then(function(ks){ks.forEach(function(k){caches.delete(k)})}); }
+                location.replace(location.pathname+'?v='+V);
+                return;
+            }
+            localStorage.setItem('_fanous_v',V);
+        }catch(e){}
+    })();
+    </script>
 </head>
 <body>
     <!-- PIN Lock Overlay -->
@@ -684,8 +704,8 @@
                                 </div>
                                 <div class="form-group">
                                     <label>فاصله همگام‌سازی (ثانیه)</label>
-                                    <input type="number" id="syncInterval" class="form-control" value="60" min="10" max="600">
-                                    <small class="field-hint">هر چند ثانیه داده‌های ابری بررسی شود (پیشنهادی: ۶۰)</small>
+                                    <input type="number" id="syncInterval" class="form-control" value="10" min="5" max="600">
+                                    <small class="field-hint">هر چند ثانیه داده‌های ابری بررسی شود (پیشنهادی: ۱۰)</small>
                                 </div>
 
                                 <div style="display:flex; gap:8px; flex-wrap:wrap; margin-top:12px;">
@@ -736,8 +756,8 @@
         </div>
     </div>
 
-    <script src="assets/js/db.js"></script>
-    <script src="assets/js/cloud.js"></script>
-    <script src="assets/js/app.js"></script>
+    <script src="assets/js/db.js?v=3"></script>
+    <script src="assets/js/cloud.js?v=3"></script>
+    <script src="assets/js/app.js?v=3"></script>
 </body>
 </html>

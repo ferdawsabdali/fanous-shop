@@ -26,7 +26,7 @@ const CloudSync = {
                 shopId: '',
                 shopPin: '',
                 lastSync: null,
-                pullInterval: 60           // seconds between auto-pulls
+                pullInterval: 10           // seconds between auto-pulls (fast multi-device sync)
             };
         }
         return this._cfg;
@@ -109,8 +109,7 @@ const CloudSync = {
             return false;
         }
         if (changed) {
-            const p = document.querySelector('.page.active');
-            if (p) refreshPage(p.id);
+            this._onDataChanged();
         }
         return changed;
     },
@@ -289,14 +288,14 @@ const CloudSync = {
         const c = this.cfg();
         if (!c.enabled) return;
         this.stopAutoSync();
-        const ms = (c.pullInterval || 60) * 1000;
+        // Minimum 5s, default 10s for faster multi-device sync
+        const ms = Math.max(5, (c.pullInterval || 10)) * 1000;
         this._timer = setInterval(() => {
-            if (c.enabled && navigator.onLine) {
+            if (c.enabled && navigator.onLine && !this._busy) {
                 this.pull().then(changed => {
                     if (changed === 'pin_mismatch') return;
                     if (changed) {
-                        const p = document.querySelector('.page.active');
-                        if (p) refreshPage(p.id);
+                        this._onDataChanged();
                     }
                 });
             }
@@ -305,6 +304,32 @@ const CloudSync = {
 
     stopAutoSync() {
         if (this._timer) { clearInterval(this._timer); this._timer = null; }
+    },
+
+    /* ========== Real-time Data Changed Handler ========== */
+    _onDataChanged() {
+        // Refresh the active page
+        const p = document.querySelector('.page.active');
+        if (p) refreshPage(p.id);
+        // Show a non-blocking notification
+        this._showSyncNotification('📥 داده‌های جدیدی از دستگاه دیگر دریافت شد');
+        // Dispatch a global event so any custom listeners can react
+        window.dispatchEvent(new Event('cloud-data-updated'));
+    },
+
+    _showSyncNotification(msg) {
+        const existing = document.getElementById('syncNotificationToast');
+        if (existing) existing.remove();
+        const toast = document.createElement('div');
+        toast.id = 'syncNotificationToast';
+        toast.style.cssText = 'position:fixed;bottom:20px;left:50%;transform:translateX(-50%);z-index:999998;background:#1e40af;color:#fff;padding:10px 24px;border-radius:8px;font-family:Vazirmatn,sans-serif;font-size:13px;direction:rtl;box-shadow:0 4px 16px rgba(0,0,0,0.3);opacity:0;transition:opacity 0.3s ease;';
+        toast.textContent = msg;
+        document.body.appendChild(toast);
+        requestAnimationFrame(() => { toast.style.opacity = '1'; });
+        setTimeout(() => {
+            toast.style.opacity = '0';
+            setTimeout(() => toast.remove(), 300);
+        }, 3000);
     },
 
     /* ========== Connect / Disconnect ========== */
@@ -364,14 +389,8 @@ const CloudSync = {
         // If cloud enabled and online, pull latest data
         if (c.enabled && navigator.onLine) {
             this.pull().then(changed => {
-                if (changed === 'pin_mismatch') {
-                    // Don't auto-sync on mismatch
-                    return;
-                }
-                if (changed) {
-                    const p = document.querySelector('.page.active');
-                    if (p) refreshPage(p.id);
-                }
+                if (changed === 'pin_mismatch') return;
+                if (changed) this._onDataChanged();
                 this.startAutoSync();
             }).catch(() => this._set('error'));
         } else if (c.enabled && !navigator.onLine) {
@@ -383,10 +402,7 @@ const CloudSync = {
             if (this.cfg().enabled) {
                 this.pull().then(changed => {
                     if (changed === 'pin_mismatch') return;
-                    if (changed) {
-                        const p = document.querySelector('.page.active');
-                        if (p) refreshPage(p.id);
-                    }
+                    if (changed) this._onDataChanged();
                     this.startAutoSync();
                 }).catch(() => this._set('error'));
             }
