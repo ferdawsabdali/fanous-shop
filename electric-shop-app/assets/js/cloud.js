@@ -10,6 +10,7 @@ const CloudSync = {
     _busy: false,
     _status: 'offline',
     _debounce: null,
+    _pinMismatch: false,
 
     /* ========== Configuration ========== */
     cfg() {
@@ -81,9 +82,11 @@ const CloudSync = {
         const connectBtn = document.getElementById('connectCloud');
         const disconnectBtn = document.getElementById('disconnectCloud');
         const forceBtn = document.getElementById('forceSyncCloud');
+        const changePinBtn = document.getElementById('changeCloudPin');
         if (connectBtn) connectBtn.style.display = this.cfg().enabled ? 'none' : '';
         if (disconnectBtn) disconnectBtn.style.display = this.cfg().enabled ? '' : 'none';
         if (forceBtn) forceBtn.style.display = this.cfg().enabled ? '' : 'none';
+        if (changePinBtn) changePinBtn.style.display = (this.cfg().enabled && this.cfg().shopPin) ? '' : 'none';
     },
 
     _set(s) {
@@ -101,10 +104,15 @@ const CloudSync = {
     /* ========== Force Pull (click sync indicator) ========== */
     async forcePull() {
         const changed = await this.pull();
+        if (changed === 'pin_mismatch') {
+            alert('🔒 رمز عبور ابری با رمز محلی تطابق ندارد!\nداده‌های ابری رد شد.\nلطفاً رمز عبور را در تنظیمات اصلاح کنید.');
+            return false;
+        }
         if (changed) {
             const p = document.querySelector('.page.active');
             if (p) refreshPage(p.id);
         }
+        return changed;
     },
 
     /* ========== PUSH to cloud ========== */
@@ -133,6 +141,17 @@ const CloudSync = {
         }
     },
 
+    /* ========== PIN Verification ========== */
+    verifyPin(cloudPin) {
+        const c = this.cfg();
+        // If cloud has no PIN (empty), allow without check
+        if (!cloudPin) return true;
+        // If local has no PIN set, reject — must configure PIN first
+        if (!c.shopPin) return false;
+        // Strict match
+        return c.shopPin === cloudPin;
+    },
+
     /* ========== PULL from cloud ========== */
     async pull() {
         const c = this.cfg();
@@ -147,6 +166,16 @@ const CloudSync = {
             else r = await this._pullCustom();
 
             if (r && r.data) {
+                // Verify PIN before applying cloud data
+                if (!this.verifyPin(r.pin)) {
+                    console.warn('🔒 PIN mismatch — cloud data rejected');
+                    this._busy = false;
+                    this._set('error');
+                    // Show persistent PIN mismatch alert
+                    this._showPinMismatchError();
+                    return 'pin_mismatch';
+                }
+
                 const cloudT = new Date(r.updatedAt).getTime();
                 const localT = c.lastSync ? new Date(c.lastSync).getTime() : 0;
                 if (cloudT > localT || !c.lastSync) {
@@ -167,6 +196,17 @@ const CloudSync = {
         } finally {
             this._busy = false;
         }
+    },
+
+    _showPinMismatchError() {
+        // Show a non-blocking notification that PIN doesn't match
+        const existing = document.getElementById('pinMismatchBanner');
+        if (existing) existing.remove();
+        const banner = document.createElement('div');
+        banner.id = 'pinMismatchBanner';
+        banner.style.cssText = 'position:fixed;top:0;left:0;right:0;z-index:99999;background:#dc2626;color:#fff;padding:12px 20px;text-align:center;font-family:Vazirmatn,sans-serif;font-size:14px;direction:rtl;box-shadow:0 2px 8px rgba(0,0,0,0.3);';
+        banner.innerHTML = '🔒 <strong>خطای امنیتی:</strong> رمز ابری با رمز محلی تطابق ندارد! داده‌های ابری رد شد. لطفاً رمز عبور را در تنظیمات اصلاح کنید. <button onclick="this.parentElement.remove()" style="margin-right:15px;background:#fff;color:#dc2626;border:none;padding:4px 14px;border-radius:4px;cursor:pointer;font-family:Vazirmatn,sans-serif;">بستن</button>';
+        document.body.appendChild(banner);
     },
 
     _normalizeSBUrl(url) {
@@ -205,7 +245,7 @@ const CloudSync = {
         const c = this.cfg();
         const baseUrl = this._normalizeSBUrl(c.supabaseUrl);
         const url = baseUrl + '/rest/v1/shop_data?shop_id=eq.'
-            + encodeURIComponent(c.shopId) + '&select=data,updated_at';
+            + encodeURIComponent(c.shopId) + '&select=data,updated_at,pin';
         const resp = await fetch(url, {
             headers: {
                 'apikey': c.supabaseKey,
@@ -214,7 +254,7 @@ const CloudSync = {
         });
         if (!resp.ok) throw new Error('Supabase pull ' + resp.status);
         const rows = await resp.json();
-        return rows.length ? { data: rows[0].data, updatedAt: rows[0].updated_at } : null;
+        return rows.length ? { data: rows[0].data, updatedAt: rows[0].updated_at, pin: rows[0].pin || '' } : null;
     },
 
     /* ========== Custom REST API ========== */
@@ -241,7 +281,7 @@ const CloudSync = {
         if (resp.status === 404) return null;
         if (!resp.ok) throw new Error('Custom pull ' + resp.status);
         const j = await resp.json();
-        return { data: j.data, updatedAt: j.updatedAt };
+        return { data: j.data, updatedAt: j.updatedAt, pin: j.pin || '' };
     },
 
     /* ========== Auto-Sync ========== */
@@ -253,6 +293,7 @@ const CloudSync = {
         this._timer = setInterval(() => {
             if (c.enabled && navigator.onLine) {
                 this.pull().then(changed => {
+                    if (changed === 'pin_mismatch') return;
                     if (changed) {
                         const p = document.querySelector('.page.active');
                         if (p) refreshPage(p.id);
@@ -274,6 +315,12 @@ const CloudSync = {
         try {
             // Try pulling first; if cloud empty, push local data
             const changed = await this.pull();
+            if (changed === 'pin_mismatch') {
+                c.enabled = false;
+                this.saveCfg();
+                this._set('error');
+                return { ok: false, error: 'رمز عبور ابری با رمز محلی تطابق ندارد. لطفاً رمز صحیح را در تنظیمات وارد کنید.' };
+            }
             if (!changed) await this.push();
             this.startAutoSync();
             this.saveCfg();
@@ -293,6 +340,23 @@ const CloudSync = {
         this._set('offline');
     },
 
+    /* ========== Change PIN ========== */
+    async changePin(newPin) {
+        const c = this.cfg();
+        c.shopPin = newPin || '';
+        this.saveCfg();
+        // Push to cloud so cloud PIN matches local
+        if (c.enabled && navigator.onLine) {
+            try {
+                await this.push();
+                return { ok: true };
+            } catch (e) {
+                return { ok: false, error: e.message };
+            }
+        }
+        return { ok: true };
+    },
+
     /* ========== Initialize ========== */
     init() {
         const c = this.cfg();
@@ -300,6 +364,10 @@ const CloudSync = {
         // If cloud enabled and online, pull latest data
         if (c.enabled && navigator.onLine) {
             this.pull().then(changed => {
+                if (changed === 'pin_mismatch') {
+                    // Don't auto-sync on mismatch
+                    return;
+                }
                 if (changed) {
                     const p = document.querySelector('.page.active');
                     if (p) refreshPage(p.id);
@@ -314,6 +382,7 @@ const CloudSync = {
         window.addEventListener('online', () => {
             if (this.cfg().enabled) {
                 this.pull().then(changed => {
+                    if (changed === 'pin_mismatch') return;
                     if (changed) {
                         const p = document.querySelector('.page.active');
                         if (p) refreshPage(p.id);

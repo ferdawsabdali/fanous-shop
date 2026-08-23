@@ -2120,6 +2120,29 @@ $('forceSyncCloud').onclick = async () => {
     $('forceSyncCloud').textContent = '🔄 همگام‌سازی دستی';
 };
 
+$('changeCloudPin').onclick = async () => {
+    const currentPin = CloudSync.cfg().shopPin || '';
+    const oldPin = prompt('رمز عبور فعلی را وارد کنید:');
+    if (oldPin === null) return;
+    if (oldPin !== currentPin) {
+        alert('رمز عبور فعلی اشتباه است!');
+        return;
+    }
+    const newPin = prompt('رمز عبور جدید را وارد کنید:');
+    if (newPin === null) return;
+    if (!newPin.trim()) {
+        alert('رمز عبور نمی‌تواند خالی باشد!');
+        return;
+    }
+    try {
+        await CloudSync.changePin(newPin.trim());
+        $('cloudShopPin').value = newPin.trim();
+        alert('رمز عبور با موفقیت تغییر کرد! ✅');
+    } catch (e) {
+        alert('خطا در تغییر رمز عبور: ' + e.message);
+    }
+};
+
 // Click sync indicator in header → force pull
 $('syncIndicator').onclick = async () => {
     if (!CloudSync.cfg().enabled) {
@@ -2135,8 +2158,57 @@ $('syncIndicator').onclick = async () => {
 
 loadCloudSettings();
 
+// ==================== PIN LOCK SCREEN ====================
+function checkPinLock() {
+    const c = CloudSync.cfg();
+    // Only show lock if cloud is enabled AND a PIN is set AND not already verified this session
+    if (c.enabled && c.shopPin && !sessionStorage.getItem('pin_verified')) {
+        const overlay = $('pinLockOverlay');
+        if (overlay) {
+            overlay.style.display = 'flex';
+            $('pinLockInput').value = '';
+            $('pinLockError').style.display = 'none';
+            $('pinLockInput').focus();
+        }
+        return true;  // locked
+    }
+    return false;  // not locked
+}
+
+function submitPinLock() {
+    const input = $('pinLockInput').value.trim();
+    const c = CloudSync.cfg();
+    if (!input) return;
+    if (input === c.shopPin) {
+        sessionStorage.setItem('pin_verified', '1');
+        const overlay = $('pinLockOverlay');
+        if (overlay) {
+            overlay.style.animation = 'pinLockFadeOut 0.3s ease forwards';
+            setTimeout(() => {
+                overlay.style.display = 'none';
+                overlay.style.animation = '';
+            }, 300);
+        }
+    } else {
+        $('pinLockError').style.display = 'block';
+        $('pinLockError').style.animation = 'none';
+        // Force reflow to restart animation
+        void $('pinLockError').offsetWidth;
+        $('pinLockError').style.animation = 'pinLockShake 0.4s ease';
+        $('pinLockInput').value = '';
+        $('pinLockInput').focus();
+    }
+}
+
+// Enter key on PIN input → submit
+$('pinLockInput').addEventListener('keydown', e => {
+    if (e.key === 'Enter') submitPinLock();
+});
+
 // Date display
 $('currentDate').textContent = new Date().toLocaleDateString('fa-AF', { weekday: 'long', year: 'numeric', month: 'long', day: 'numeric' });
 
-// Init
-loadDashboard();
+// Init — check PIN lock first
+if (!checkPinLock()) {
+    loadDashboard();
+}

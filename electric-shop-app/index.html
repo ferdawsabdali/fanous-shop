@@ -8,6 +8,24 @@
     <link href="https://cdn.jsdelivr.net/gh/rastikerdar/vazirmatn@v33.003/Vazirmatn-font-face.css" rel="stylesheet">
 </head>
 <body>
+    <!-- PIN Lock Overlay -->
+    <div id="pinLockOverlay" class="pin-lock-overlay" style="display:none">
+        <div class="pin-lock-card">
+            <div class="pin-lock-icon">🔒</div>
+            <h2 class="pin-lock-title">دسترسی محدود است</h2>
+            <p class="pin-lock-desc">برای ورود به برنامه، رمز عبور ابری خود را وارد کنید</p>
+            <div class="pin-lock-input-wrap">
+                <input type="password" id="pinLockInput" class="pin-lock-input" placeholder="رمز عبور" dir="ltr" autocomplete="off">
+                <button id="pinLockSubmit" class="pin-lock-btn" onclick="submitPinLock()">
+                    <span>ورود</span>
+                    <span class="pin-lock-btn-icon">→</span>
+                </button>
+            </div>
+            <p id="pinLockError" class="pin-lock-error" style="display:none">رمز عبور اشتباه است!</p>
+            <p class="pin-lock-hint">رمز عبور همان رمزی است که در تنظیمات ابری ذخیره کرده‌اید</p>
+        </div>
+    </div>
+
     <div class="app-container">
         <!-- Sidebar -->
         <aside class="sidebar" id="sidebar">
@@ -674,6 +692,7 @@
                                     <button class="btn btn-success" id="connectCloud">☁️ اتصال به ابر</button>
                                     <button class="btn btn-danger" id="disconnectCloud" style="display:none">📴 قطع اتصال</button>
                                     <button class="btn btn-secondary" id="forceSyncCloud" style="display:none">🔄 همگام‌سازی دستی</button>
+                                    <button class="btn btn-warning" id="changeCloudPin" style="display:none">🔑 تغییر رمز عبور</button>
                                 </div>
 
                                 <div style="margin-top:16px; padding:12px; background:#f0f9ff; border-radius:8px; border:1px solid #bae6fd; font-size:13px;">
