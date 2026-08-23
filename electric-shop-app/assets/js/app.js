@@ -1977,6 +1977,7 @@ function loadSettings() {
     $('shopAddress').value = shop.address;
     $('shopPhone').value = shop.phone;
     $('marketDebt').value = DB.getMarketDebt();
+    loadCloudSettings();
 }
 
 $('saveShopInfo').onclick = () => {
@@ -2030,6 +2031,109 @@ $('importBtn').onchange = e => {
     };
     reader.readAsText(file);
 };
+
+// ==================== CLOUD SYNC SETTINGS ====================
+function loadCloudSettings() {
+    const c = CloudSync.cfg();
+    $('cloudProvider').value = c.provider || 'supabase';
+    $('supabaseUrl').value = c.supabaseUrl || '';
+    $('supabaseKey').value = c.supabaseKey || '';
+    $('customApiUrl').value = c.customApiUrl || '';
+    $('customApiKey').value = c.customApiKey || '';
+    $('cloudShopId').value = c.shopId || '';
+    $('cloudShopPin').value = c.shopPin || '';
+    $('syncInterval').value = c.pullInterval || 60;
+    toggleCloudProviderFields();
+    CloudSync.refreshUI();
+}
+
+function toggleCloudProviderFields() {
+    const v = $('cloudProvider').value;
+    $('supabaseFields').style.display = v === 'supabase' ? '' : 'none';
+    $('customFields').style.display = v === 'custom' ? '' : 'none';
+}
+
+$('cloudProvider').onchange = toggleCloudProviderFields;
+
+$('connectCloud').onclick = async () => {
+    const settings = {
+        provider: $('cloudProvider').value,
+        supabaseUrl: $('supabaseUrl').value.trim(),
+        supabaseKey: $('supabaseKey').value.trim(),
+        customApiUrl: $('customApiUrl').value.trim(),
+        customApiKey: $('customApiKey').value.trim(),
+        shopId: $('cloudShopId').value.trim(),
+        shopPin: $('cloudShopPin').value.trim(),
+        pullInterval: parseInt($('syncInterval').value) || 60
+    };
+    if (!settings.shopId) {
+        alert('لطفاً شناسه دکان را وارد کنید');
+        return;
+    }
+    if (settings.provider === 'supabase') {
+        if (!settings.supabaseUrl || !settings.supabaseKey) {
+            alert('لطفاً آدرس و کلید Supabase را وارد کنید');
+            return;
+        }
+    } else {
+        if (!settings.customApiUrl) {
+            alert('لطفاً آدرس سرور API را وارد کنید');
+            return;
+        }
+    }
+
+    $('connectCloud').disabled = true;
+    $('connectCloud').textContent = '⏳ در حال اتصال...';
+    try {
+        const result = await CloudSync.connect(settings);
+        if (result.ok) {
+            alert(result.pulled ? 'اتصال موفق! داده‌های ابری بارگذاری شد.' : 'اتصال موفق! داده‌های محلی به ابر ارسال شد.');
+            location.reload();
+        } else {
+            alert('خطا در اتصال: ' + (result.error || 'نامشخص'));
+        }
+    } catch (e) {
+        alert('خطا در اتصال: ' + e.message);
+    }
+    $('connectCloud').disabled = false;
+    $('connectCloud').textContent = '☁️ اتصال به ابر';
+};
+
+$('disconnectCloud').onclick = () => {
+    if (confirm('آیا از قطع اتصال ابری مطمئن هستید؟\nداده‌ها همچنان در مرورگر ذخیره می‌شوند اما دیگر همگام‌سازی نمی‌شوند.')) {
+        CloudSync.disconnect();
+        alert('اتصال ابری قطع شد');
+    }
+};
+
+$('forceSyncCloud').onclick = async () => {
+    $('forceSyncCloud').disabled = true;
+    $('forceSyncCloud').textContent = '🔄 در حال همگام‌سازی...';
+    try {
+        await CloudSync.push();
+        const changed = await CloudSync.forcePull();
+        alert(changed ? 'همگام‌سازی کامل شد — داده‌های جدیدی از ابر دریافت شد.' : 'همگام‌سازی کامل شد — داده‌ها به‌روز است.');
+    } catch (e) {
+        alert('خطا در همگام‌سازی: ' + e.message);
+    }
+    $('forceSyncCloud').disabled = false;
+    $('forceSyncCloud').textContent = '🔄 همگام‌سازی دستی';
+};
+
+// Click sync indicator in header → force pull
+$('syncIndicator').onclick = async () => {
+    if (!CloudSync.cfg().enabled) {
+        alert('ذخیره ابری فعال نیست. از تنظیمات فعال کنید.');
+        return;
+    }
+    const changed = await CloudSync.forcePull();
+    if (changed) {
+        const p = document.querySelector('.page.active');
+        if (p) refreshPage(p.id);
+    }
+};
+
+loadCloudSettings();
 
 // Date display
 $('currentDate').textContent = new Date().toLocaleDateString('fa-AF', { weekday: 'long', year: 'numeric', month: 'long', day: 'numeric' });

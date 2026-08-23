@@ -885,3 +885,91 @@ textarea.form-control {
         padding: 6px 8px;
     }
 }
+
+/* ========== Cloud Sync Styles ========== */
+.sync-indicator {
+    display: inline-flex;
+    align-items: center;
+    gap: 4px;
+    padding: 4px 12px;
+    border-radius: 20px;
+    font-size: 12px;
+    font-weight: 500;
+    border: 1.5px solid #64748b;
+    background: #f1f5f9;
+    cursor: pointer;
+    transition: all 0.3s ease;
+    user-select: none;
+    white-space: nowrap;
+}
+.sync-indicator:hover {
+    transform: scale(1.05);
+    box-shadow: 0 2px 8px rgba(0,0,0,0.1);
+}
+.sync-indicator .sync-icon {
+    font-size: 14px;
+}
+.sync-indicator .sync-label {
+    color: #334155;
+}
+
+/* Cloud Status Bar */
+.cloud-status {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    padding: 10px 14px;
+    border-radius: 8px;
+    font-size: 14px;
+    font-weight: 500;
+    margin-bottom: 16px;
+    transition: all 0.3s ease;
+}
+.cloud-status.connected {
+    background: #ecfdf5;
+    border: 1px solid #10b981;
+    color: #065f46;
+}
+.cloud-status.syncing {
+    background: #fffbeb;
+    border: 1px solid #f59e0b;
+    color: #92400e;
+}
+.cloud-status.disconnected {
+    background: #f1f5f9;
+    border: 1px solid #94a3b8;
+    color: #475569;
+}
+.cloud-status.error {
+    background: #fef2f2;
+    border: 1px solid #ef4444;
+    color: #991b1b;
+}
+
+/* Field hint text */
+.field-hint {
+    display: block;
+    font-size: 11px;
+    color: #94a3b8;
+    margin-top: 4px;
+}
+
+/* Cloud settings card tweaks */
+#settings .settings-grid .card:nth-child(2) .card-body {
+    overflow: visible;
+}
+
+/* Responsive sync indicator */
+@media (max-width: 768px) {
+    .sync-indicator {
+        padding: 3px 8px;
+        font-size: 11px;
+    }
+    .sync-indicator .sync-label {
+        display: none;
+    }
+    .header-actions {
+        flex-wrap: wrap;
+        gap: 6px;
+    }
+}

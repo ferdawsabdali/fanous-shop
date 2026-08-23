@@ -1,3 +1,9 @@
+/**
+ * 🗄️ DB Module — Electric Shop App (فانوس)
+ * Primary: localStorage (always works offline)
+ * Cloud:  CloudSync module syncs on every save (debounced 3s)
+ */
+
 // Persian date utilities
 function gregorianToJalali(gy, gm, gd) {
     const g_days_in_month = [31, 28, 31, 30, 31, 30, 31, 31, 30, 31, 30, 31];
@@ -85,6 +91,8 @@ const DB = {
     
     save(data) {
         localStorage.setItem(this.key, JSON.stringify(data));
+        // 🔔 Notify cloud sync (debounced push)
+        window.dispatchEvent(new Event('db-save'));
     },
     
     getNextId(type, data) {
@@ -737,3 +745,5 @@ const DB = {
 };
 
 DB.init();
+// 🔔 Notify CloudSync that DB is ready
+window.dispatchEvent(new Event('db-ready'));
