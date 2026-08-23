@@ -1,0 +1,641 @@
+<!DOCTYPE html>
+<html lang="fa" dir="rtl">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>لوازم برق و صنعت فانوس</title>
+    <link rel="stylesheet" href="assets/css/style.css">
+    <link href="https://cdn.jsdelivr.net/gh/rastikerdar/vazirmatn@v33.003/Vazirmatn-font-face.css" rel="stylesheet">
+</head>
+<body>
+    <div class="app-container">
+        <!-- Sidebar -->
+        <aside class="sidebar" id="sidebar">
+            <div class="sidebar-header">
+                <div class="logo">
+                    <span class="logo-icon">⚡</span>
+                    <span class="logo-text">فانوس</span>
+                </div>
+                <button class="close-sidebar" id="closeSidebar">×</button>
+            </div>
+            <nav class="sidebar-nav">
+                <a href="#" class="nav-link active" data-page="dashboard">
+                    <span class="nav-icon">📊</span>
+                    <span>داشبورد</span>
+                </a>
+                <a href="#" class="nav-link" data-page="inventory">
+                    <span class="nav-icon">📦</span>
+                    <span>انبار و موجودی</span>
+                </a>
+                <a href="#" class="nav-link" data-page="sales">
+                    <span class="nav-icon">🛒</span>
+                    <span>فروش و فاکتور</span>
+                </a>
+                <a href="#" class="nav-link" data-page="repairs">
+                    <span class="nav-icon">🔧</span>
+                    <span>تعمیرات</span>
+                </a>
+                <a href="#" class="nav-link" data-page="projects">
+                    <span class="nav-icon">🏗️</span>
+                    <span>پروژه‌های برق‌کاری</span>
+                </a>
+
+                <div class="nav-group">
+                    <a href="#" class="nav-link nav-toggle">
+                        <span class="nav-icon">💼</span>
+                        <span>مالی و حسابداری</span>
+                        <span class="nav-chevron">▼</span>
+                    </a>
+                    <div class="nav-submenu">
+                        <a href="#" class="nav-link" data-page="purchases">🛍️ خریداری</a>
+                        <a href="#" class="nav-link" data-page="finance">💰 امور مالی</a>
+                        <a href="#" class="nav-link" data-page="debtors">📝 طلب و قروض</a>
+                        <a href="#" class="nav-link" data-page="assets">🪑 دارایی‌ها</a>
+                    </div>
+                </div>
+
+                <div class="nav-group">
+                    <a href="#" class="nav-link nav-toggle">
+                        <span class="nav-icon">👥</span>
+                        <span>اشخاص</span>
+                        <span class="nav-chevron">▼</span>
+                    </a>
+                    <div class="nav-submenu">
+                        <a href="#" class="nav-link" data-page="employees">👷 کارمندان و شریک</a>
+                    </div>
+                </div>
+
+                <a href="#" class="nav-link" data-page="reports">
+                    <span class="nav-icon">📈</span>
+                    <span>گزارش‌ها</span>
+                </a>
+
+                <a href="#" class="nav-link" data-page="settings">
+                    <span class="nav-icon">⚙️</span>
+                    <span>تنظیمات</span>
+                </a>
+            </nav>
+            <div class="sidebar-footer">
+                <small>لوازم برق و صنعت فانوس</small>
+            </div>
+        </aside>
+
+        <!-- Main Content -->
+        <main class="main-content">
+            <!-- Top Header -->
+            <header class="top-header">
+                <button class="menu-toggle" id="menuToggle">☰</button>
+                <h1 class="page-title" id="pageTitle">داشبورد</h1>
+                <div class="header-actions">
+                    <span class="date-display" id="currentDate"></span>
+                    <button class="btn btn-primary" id="exportBtn">📥 خروجی JSON</button>
+                    <input type="file" id="importBtn" accept=".json" hidden>
+                    <button class="btn btn-secondary" onclick="document.getElementById('importBtn').click()">📤 ورودی JSON</button>
+                </div>
+            </header>
+
+            <!-- Pages -->
+            <div class="pages">
+                <!-- Dashboard Page -->
+                <div class="page active" id="dashboard">
+                    <div class="stats-grid six-col">
+                        <div class="stat-card blue">
+                            <div class="stat-icon">💰</div>
+                            <div class="stat-info">
+                                <span class="stat-value" id="totalSales">0</span>
+                                <span class="stat-label">فروش امروز (افغانی)</span>
+                            </div>
+                        </div>
+                        <div class="stat-card green">
+                            <div class="stat-icon">🔧</div>
+                            <div class="stat-info">
+                                <span class="stat-value" id="totalRepairs">0</span>
+                                <span class="stat-label">تعمیرات امروز</span>
+                            </div>
+                        </div>
+                        <div class="stat-card orange">
+                            <div class="stat-icon">🏗️</div>
+                            <div class="stat-info">
+                                <span class="stat-value" id="activeProjects">0</span>
+                                <span class="stat-label">پروژه‌های فعال</span>
+                            </div>
+                        </div>
+                        <div class="stat-card purple">
+                            <div class="stat-icon">📦</div>
+                            <div class="stat-info">
+                                <span class="stat-value" id="lowStock">0</span>
+                                <span class="stat-label">موجودی کم</span>
+                            </div>
+                        </div>
+                        <div class="stat-card teal">
+                            <div class="stat-icon">🏭</div>
+                            <div class="stat-info">
+                                <span class="stat-value" id="inventoryValue">0</span>
+                                <span class="stat-label">ارزش موجودی انبار (افغانی)</span>
+                            </div>
+                        </div>
+                        <div class="stat-card orange">
+                            <div class="stat-icon">🪑</div>
+                            <div class="stat-info">
+                                <span class="stat-value" id="assetsValue">0</span>
+                                <span class="stat-label">ارزش دارایی‌ها (افغانی)</span>
+                            </div>
+                        </div>
+                    </div>
+
+                    <div class="dashboard-grid">
+                        <div class="card">
+                            <div class="card-header">
+                                <h3>📈 نمودار فروش هفتگی</h3>
+                            </div>
+                            <div class="card-body">
+                                <canvas id="salesChart" width="400" height="200"></canvas>
+                            </div>
+                        </div>
+                        <div class="card">
+                            <div class="card-header">
+                                <h3>🔧 تعمیرات اخیر</h3>
+                            </div>
+                            <div class="card-body">
+                                <table class="table">
+                                    <thead>
+                                        <tr><th>مشتری</th><th>دستگاه</th><th>وضعیت</th><th>هزینه</th></tr>
+                                    </thead>
+                                    <tbody id="recentRepairs"></tbody>
+                                </table>
+                            </div>
+                        </div>
+                    </div>
+
+                    <div class="card mt-4">
+                        <div class="card-header">
+                            <h3>🏗️ پروژه‌های در حال انجام</h3>
+                        </div>
+                        <div class="card-body">
+                            <table class="table">
+                                <thead>
+                                    <tr><th>نام پروژه</th><th>مشتری</th><th>آدرس</th><th>پیشرفت</th><th>باقیمانده</th></tr>
+                                </thead>
+                                <tbody id="recentProjects"></tbody>
+                            </table>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Inventory Page -->
+                <div class="page" id="inventory">
+                    <div class="page-actions">
+                        <button class="btn btn-primary" id="addProductBtn">+ افزودن محصول</button>
+                        <input type="text" class="search-input" id="searchProduct" placeholder="جستجوی محصول...">
+                    </div>
+                    <div class="card">
+                        <div class="card-body">
+                            <table class="table">
+                                <thead>
+                                    <tr>
+                                        <th>کد</th>
+                                        <th>نام محصول</th>
+                                        <th>دسته‌بندی</th>
+                                        <th>قیمت خرید</th>
+                                        <th>قیمت فروش</th>
+                                        <th>موجودی</th>
+                                        <th>عملیات</th>
+                                    </tr>
+                                </thead>
+                                <tbody id="productsTable"></tbody>
+                            </table>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Purchases Page -->
+                <div class="page" id="purchases">
+                    <div class="page-actions">
+                        <button class="btn btn-primary" id="addPurchaseBtn">+ خریداری جدید</button>
+                        <input type="text" class="search-input" id="searchPurchase" placeholder="جستجوی خریداری...">
+                    </div>
+                    <div class="card">
+                        <div class="card-body">
+                            <table class="table">
+                                <thead>
+                                    <tr>
+                                        <th>کد</th>
+                                        <th>نام جنس</th>
+                                        <th>تعداد</th>
+                                        <th>قیمت واحد</th>
+                                        <th>قیمت کل</th>
+                                        <th>پرداخت‌شده</th>
+                                        <th>باقی‌مانده</th>
+                                        <th>فروشنده</th>
+                                        <th>تاریخ</th>
+                                        <th>عملیات</th>
+                                    </tr>
+                                </thead>
+                                <tbody id="purchasesTable"></tbody>
+                            </table>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Sales Page -->
+                <div class="page" id="sales">
+                    <div class="page-actions">
+                        <button class="btn btn-primary" id="newSaleBtn">+ فاکتور جدید</button>
+                        <input type="text" class="search-input" id="searchSale" placeholder="جستجوی فاکتور...">
+                    </div>
+                    <div class="card">
+                        <div class="card-body">
+                            <table class="table">
+                                <thead>
+                                    <tr>
+                                        <th>شماره فاکتور</th>
+                                        <th>مشتری</th>
+                                        <th>تاریخ</th>
+                                        <th>مبلغ کل</th>
+                                        <th>تخفیف</th>
+                                        <th>قابل پرداخت</th>
+                                        <th>پرداخت‌شده</th>
+                                        <th>باقی‌مانده</th>
+                                        <th>عملیات</th>
+                                    </tr>
+                                </thead>
+                                <tbody id="salesTable"></tbody>
+                            </table>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Repairs Page -->
+                <div class="page" id="repairs">
+                    <div class="page-actions">
+                        <button class="btn btn-primary" id="newRepairBtn">+ تعمیر جدید</button>
+                        <input type="text" class="search-input" id="searchRepair" placeholder="جستجوی تعمیر...">
+                    </div>
+                    <div class="card">
+                        <div class="card-body">
+                            <table class="table">
+                                <thead>
+                                    <tr>
+                                        <th>کد</th>
+                                        <th>مشتری</th>
+                                        <th>دستگاه</th>
+                                        <th>مشکل</th>
+                                        <th>تاریخ دریافت</th>
+                                        <th>وضعیت</th>
+                                        <th>هزینه</th>
+                                        <th>پرداخت‌شده</th>
+                                        <th>باقی‌مانده</th>
+                                        <th>عملیات</th>
+                                    </tr>
+                                </thead>
+                                <tbody id="repairsTable"></tbody>
+                            </table>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Projects Page -->
+                <div class="page" id="projects">
+                    <div class="page-actions">
+                        <button class="btn btn-primary" id="newProjectBtn">+ پروژه جدید</button>
+                        <input type="text" class="search-input" id="searchProject" placeholder="جستجوی پروژه...">
+                    </div>
+                    <div class="card">
+                        <div class="card-body">
+                            <table class="table">
+                                <thead>
+                                    <tr>
+                                        <th>کد</th>
+                                        <th>نام پروژه</th>
+                                        <th>مشتری/شرکت</th>
+                                        <th>آدرس</th>
+                                        <th>تاریخ شروع</th>
+                                        <th>مبلغ قرارداد</th>
+                                        <th>پرداخت‌شده</th>
+                                        <th>وضعیت</th>
+                                        <th>عملیات</th>
+                                    </tr>
+                                </thead>
+                                <tbody id="projectsTable"></tbody>
+                            </table>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Employees Page -->
+                <div class="page" id="employees">
+                    <div class="page-actions">
+                        <button class="btn btn-primary" id="addEmployeeBtn">+ افزودن شخص</button>
+                        <input type="text" class="search-input" id="searchEmployee" placeholder="جستجوی شخص...">
+                    </div>
+                    <div class="card">
+                        <div class="card-body">
+                            <table class="table">
+                                <thead>
+                                    <tr>
+                                        <th>کد</th>
+                                        <th>نام</th>
+                                        <th>نقش</th>
+                                        <th>شماره تماس</th>
+                                        <th>حقوق/سهم</th>
+                                        <th>پرداختی این ماه</th>
+                                        <th>بدهکاری</th>
+                                        <th>عملیات</th>
+                                    </tr>
+                                </thead>
+                                <tbody id="employeesTable"></tbody>
+                            </table>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Debtors Page -->
+                <div class="page" id="debtors">
+                    <div class="stats-grid">
+                        <div class="stat-card red">
+                            <div class="stat-icon">📝</div>
+                            <div class="stat-info">
+                                <span class="stat-value" id="accTotalReceivable">0</span>
+                                <span class="stat-label">کل طلب‌ها</span>
+                            </div>
+                        </div>
+                        <div class="stat-card blue">
+                            <div class="stat-icon">📤</div>
+                            <div class="stat-info">
+                                <span class="stat-value" id="accTotalPayable">0</span>
+                                <span class="stat-label">کل قروض</span>
+                            </div>
+                        </div>
+                        <div class="stat-card green">
+                            <div class="stat-icon">💰</div>
+                            <div class="stat-info">
+                                <span class="stat-value" id="accNetBalance">0</span>
+                                <span class="stat-label">موجودی خالص</span>
+                            </div>
+                        </div>
+                    </div>
+                    <div class="page-actions">
+                        <input type="text" class="search-input" id="searchDebtor" placeholder="جستجو...">
+                    </div>
+                    <div class="card">
+                        <div class="card-header">
+                            <h3>📋 طلب‌کارها (بدهکاران)</h3>
+                            <small class="text-muted">اشخاصی که به شما بدهکار هستند (فروش، تعمیر، پروژه)</small>
+                        </div>
+                        <div class="card-body">
+                            <table class="table">
+                                <thead>
+                                    <tr>
+                                        <th>کد</th>
+                                        <th>نام</th>
+                                        <th>شماره تماس</th>
+                                        <th>مبلغ بدهی</th>
+                                        <th>تاریخ آخرین تراکنش</th>
+                                        <th>عملیات</th>
+                                    </tr>
+                                </thead>
+                                <tbody id="debtorsTable"></tbody>
+                            </table>
+                        </div>
+                    </div>
+                    <div class="card" style="margin-top:1.5rem">
+                        <div class="card-header">
+                            <h3>🏪 بستانکاران (قروض بازار)</h3>
+                            <small class="text-muted">فروشندگانی که شما به آن‌ها بدهکار هستید (خریداری‌ها)</small>
+                        </div>
+                        <div class="card-body">
+                            <table class="table">
+                                <thead>
+                                    <tr>
+                                        <th>کد</th>
+                                        <th>نام فروشنده</th>
+                                        <th>مبلغ بدهی</th>
+                                        <th>عملیات</th>
+                                    </tr>
+                                </thead>
+                                <tbody id="creditorsTable"></tbody>
+                            </table>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Finance Page -->
+                <div class="page" id="finance">
+                    <div class="stats-grid">
+                        <div class="stat-card blue">
+                            <div class="stat-icon">📥</div>
+                            <div class="stat-info">
+                                <span class="stat-value" id="financeIncome">0</span>
+                                <span class="stat-label">درآمد این ماه</span>
+                            </div>
+                        </div>
+                        <div class="stat-card red">
+                            <div class="stat-icon">📤</div>
+                            <div class="stat-info">
+                                <span class="stat-value" id="financeExpense">0</span>
+                                <span class="stat-label">هزینه این ماه</span>
+                            </div>
+                        </div>
+                        <div class="stat-card green">
+                            <div class="stat-icon">💵</div>
+                            <div class="stat-info">
+                                <span class="stat-value" id="financeProfit">0</span>
+                                <span class="stat-label">سود خالص</span>
+                            </div>
+                        </div>
+                        <div class="stat-card orange">
+                            <div class="stat-icon">📋</div>
+                            <div class="stat-info">
+                                <span class="stat-value" id="financeReceivables">0</span>
+                                <span class="stat-label">طلب بازار</span>
+                            </div>
+                        </div>
+                        <div class="stat-card purple">
+                            <div class="stat-icon">🏪</div>
+                            <div class="stat-info">
+                                <span class="stat-value" id="financeMarketDebt">0</span>
+                                <span class="stat-label">قروض بازار</span>
+                            </div>
+                        </div>
+                    </div>
+                    <div class="page-actions">
+                        <button class="btn btn-primary" id="addTransactionBtn">+ ثبت تراکنش</button>
+                        <input type="text" class="search-input" id="searchTransaction" placeholder="جستجوی تراکنش...">
+                    </div>
+                    <div class="card">
+                        <div class="card-body">
+                            <table class="table">
+                                <thead>
+                                    <tr>
+                                        <th>تاریخ</th>
+                                        <th>نوع</th>
+                                        <th>شرح</th>
+                                        <th>مبلغ</th>
+                                        <th>دسته‌بندی</th>
+                                        <th>عملیات</th>
+                                    </tr>
+                                </thead>
+                                <tbody id="transactionsTable"></tbody>
+                            </table>
+                        </div>
+                        <div id="txPagination" style="display:flex; justify-content:center; align-items:center; gap:8px; margin-top:12px; flex-wrap:wrap;"></div>
+                    </div>
+                </div>
+
+                <!-- Assets Page -->
+                <div class="page" id="assets">
+                    <div class="card" style="margin-bottom: 1rem; border-right: 4px solid #7c3aed;">
+                        <div class="card-header">
+                            <h3>💼 مدیریت سرمایه اولیه</h3>
+                        </div>
+                        <div class="card-body">
+                            <div style="display: flex; gap: 1rem; align-items: flex-end; flex-wrap: wrap;">
+                                <div class="form-group" style="flex: 1; min-width: 200px;">
+                                    <label>مبلغ سرمایه اولیه (افغانی)</label>
+                                    <input type="number" id="initialCapitalInput" class="form-control" placeholder="مثلاً 500000">
+                                </div>
+                                <button class="btn btn-primary" id="saveCapitalBtn">💾 ثبت سرمایه</button>
+                            </div>
+                            <div class="stats-grid" style="margin-top: 1rem;">
+                                <div class="stat-card purple">
+                                    <div class="stat-icon">💰</div>
+                                    <div class="stat-info">
+                                        <span class="stat-value" id="displayInitialCapital">0</span>
+                                        <span class="stat-label">سرمایه اولیه</span>
+                                    </div>
+                                </div>
+                                <div class="stat-card orange">
+                                    <div class="stat-icon">🪑</div>
+                                    <div class="stat-info">
+                                        <span class="stat-value" id="displayAssetsValue">0</span>
+                                        <span class="stat-label">مجموع دارایی‌ها</span>
+                                    </div>
+                                </div>
+                                <div class="stat-card teal">
+                                    <div class="stat-icon">💼</div>
+                                    <div class="stat-info">
+                                        <span class="stat-value" id="displayRemainingCapital">0</span>
+                                        <span class="stat-label">سرمایه باقی‌مانده</span>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                    <div class="page-actions">
+                        <button class="btn btn-primary" id="addAssetBtn">+ ثبت دارایی جدید</button>
+                        <input type="text" class="search-input" id="searchAsset" placeholder="جستجوی دارایی...">
+                    </div>
+                    <div class="card">
+                        <div class="card-body">
+                            <table class="table">
+                                <thead>
+                                    <tr>
+                                        <th>کد</th>
+                                        <th>نام وسیله</th>
+                                        <th>دسته‌بندی</th>
+                                        <th>تعداد</th>
+                                        <th>قیمت واحد</th>
+                                        <th>قیمت کل</th>
+                                        <th>فروشنده</th>
+                                        <th>تاریخ خرید</th>
+                                        <th>وضعیت</th>
+                                        <th>عملیات</th>
+                                    </tr>
+                                </thead>
+                                <tbody id="assetsTable"></tbody>
+                            </table>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Reports Page -->
+                <div class="page" id="reports">
+                    <div class="reports-header">
+                        <div class="report-tabs">
+                            <button class="report-tab active" data-report="sales" onclick="switchReportTab('sales')">📊 گزارش فروش</button>
+                            <button class="report-tab" data-report="purchases" onclick="switchReportTab('purchases')">🛍️ گزارش خریداری</button>
+                            <button class="report-tab" data-report="profit" onclick="switchReportTab('profit')">💰 سود و زیان</button>
+                            <button class="report-tab" data-report="inventory" onclick="switchReportTab('inventory')">📦 گزارش انبار</button>
+                            <button class="report-tab" data-report="debtors" onclick="switchReportTab('debtors')">📝 طلب و قروض</button>
+                        </div>
+                        <div class="report-filters">
+                            <div class="filter-group">
+                                <label>از تاریخ</label>
+                                <input type="text" id="reportDateFrom" class="form-control" placeholder="مثلاً 1404-01-01">
+                            </div>
+                            <div class="filter-group">
+                                <label>تا تاریخ</label>
+                                <input type="text" id="reportDateTo" class="form-control" placeholder="مثلاً 1404-12-29">
+                            </div>
+                            <button class="btn btn-primary" onclick="applyReportFilter()">🔍 فیلتر</button>
+                            <button class="btn btn-secondary" onclick="clearReportFilter()">✖ پاک کردن</button>
+                            <button class="btn btn-success" onclick="printReport()">🖨️ پرینت</button>
+                        </div>
+                    </div>
+                    <div class="report-content" id="reportContent">
+                        <!-- Dynamic report content will be rendered here -->
+                    </div>
+                    <div class="report-summary" id="reportSummary">
+                        <!-- Summary will be rendered here -->
+                    </div>
+                </div>
+
+                <!-- Settings Page -->
+                <div class="page" id="settings">
+                    <div class="settings-grid">
+                        <div class="card">
+                            <div class="card-header">
+                                <h3>🏪 اطلاعات دکان</h3>
+                            </div>
+                            <div class="card-body">
+                                <div class="form-group">
+                                    <label>نام دکان</label>
+                                    <input type="text" id="shopName" class="form-control">
+                                </div>
+                                <div class="form-group">
+                                    <label>آدرس</label>
+                                    <input type="text" id="shopAddress" class="form-control">
+                                </div>
+                                <div class="form-group">
+                                    <label>شماره تماس</label>
+                                    <input type="text" id="shopPhone" class="form-control">
+                                </div>
+                                <div class="form-group">
+                                    <label>قروض بازار (بدهی به تأمین‌کنندگان)</label>
+                                    <input type="number" id="marketDebt" class="form-control" placeholder="0">
+                                </div>
+                                <button class="btn btn-primary" id="saveShopInfo">ذخیره</button>
+                            </div>
+                        </div>
+                        <div class="card">
+                            <div class="card-header">
+                                <h3>⚠️ مدیریت داده‌ها</h3>
+                            </div>
+                            <div class="card-body">
+                                <p>تمام داده‌های شما در مرورگر ذخیره می‌شود. از دکمه‌های زیر برای پشتیبان‌گیری یا بازیابی استفاده کنید.</p>
+                                <button class="btn btn-primary mb-2" id="exportData">دانلود پشتیبان</button>
+                                <button class="btn btn-danger" id="clearData">حذف همه داده‌ها</button>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </main>
+    </div>
+
+    <!-- Modals -->
+    <div class="modal" id="modal">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h3 id="modalTitle">عنوان</h3>
+                <button class="modal-close" id="modalClose">×</button>
+            </div>
+            <div class="modal-body" id="modalBody"></div>
+            <div class="modal-footer" id="modalFooter"></div>
+        </div>
+    </div>
+
+    <script src="assets/js/db.js"></script>
+    <script src="assets/js/app.js"></script>
+</body>
+</html>
