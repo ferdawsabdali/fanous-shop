@@ -2302,7 +2302,7 @@ const SECTION_COLUMNS = {
     },
     sales: {
         headers: ['شماره', 'تاریخ', 'مشتری', 'شماره تماس', 'مبلغ کل', 'تخفیف', 'مبلغ پرداخت', 'پرداخت‌شده', 'بدهی', 'آیتم‌ها'],
-        keys: ['id', 'date', 'customer', 'phone', 'totalAmount', 'discount', 'payable', 'paid', 'debt', '_itemsText'],
+        keys: ['id', 'date', 'customer', 'phone', 'subtotal', 'discount', 'total', 'paid', 'debt', '_itemsText'],
         getData: () => DB.getSales().map(s => ({ ...s, _itemsText: (s.items || []).map(i => `${i.name}×${i.qty}@${i.price}`).join(' | ') })),
         addRow: null, // Sales have nested items — import not supported via simple Excel
         reload: loadSales
@@ -2371,7 +2371,7 @@ function exportSectionExcel(section) {
             const key = cfg.keys[i];
             let val = item[key];
             // Format money fields for readability
-            if (['buyPrice','sellPrice','unitPrice','total','paid','remaining','cost','amount','salary','debt','totalDebt','totalAmount','payable','discount'].includes(key) && val !== undefined && val !== null) {
+            if (['buyPrice','sellPrice','unitPrice','total','paid','remaining','cost','amount','salary','debt','totalDebt','subtotal','discount'].includes(key) && val !== undefined && val !== null) {
                 val = Number(val);
             }
             row[h] = val !== undefined && val !== null ? val : '';
