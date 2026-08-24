@@ -45,18 +45,7 @@ const DB = {
                 shop: { name: 'دکان لوازم برقی', address: '', phone: '' },
                 initialCapital: 0,
                 marketDebt: 0,
-                products: [
-                    { id: 1, name: 'کلید تک پل', category: 'کلید و پریز', buyPrice: 30, sellPrice: 50, stock: 100 },
-                    { id: 2, name: 'کلید دو پل', category: 'کلید و پریز', buyPrice: 50, sellPrice: 80, stock: 80 },
-                    { id: 3, name: 'پریز برق', category: 'کلید و پریز', buyPrice: 40, sellPrice: 65, stock: 120 },
-                    { id: 4, name: 'لامپ LED 9 وات', category: 'روشنایی', buyPrice: 60, sellPrice: 100, stock: 200 },
-                    { id: 5, name: 'لامپ LED 12 وات', category: 'روشنایی', buyPrice: 80, sellPrice: 130, stock: 150 },
-                    { id: 6, name: 'کابل ۲.۵ میلیمتر', category: 'کابل و سیم', buyPrice: 45, sellPrice: 70, stock: 500 },
-                    { id: 7, name: 'کابل ۴ میلیمتر', category: 'کابل و سیم', buyPrice: 70, sellPrice: 110, stock: 300 },
-                    { id: 8, name: 'فیوز ۱۶ آمپر', category: 'تجهیزات حفاظتی', buyPrice: 25, sellPrice: 40, stock: 60 },
-                    { id: 9, name: 'فیوز ۳۲ آمپر', category: 'تجهیزات حفاظتی', buyPrice: 35, sellPrice: 55, stock: 45 },
-                    { id: 10, name: 'کلید مینیاتوری ۱۶A', category: 'تجهیزات حفاظتی', buyPrice: 120, sellPrice: 180, stock: 30 },
-                ],
+                products: [],
                 sales: [],
                 repairs: [],
                 projects: [],
@@ -68,7 +57,7 @@ const DB = {
                 debtors: [],
                 purchases: [],
                 assets: [],
-                nextIds: { product: 11, sale: 1, repair: 1, project: 1, employee: 3, transaction: 1, debtor: 1, purchase: 1, asset: 1 }
+                nextIds: { product: 1, sale: 1, repair: 1, project: 1, employee: 3, transaction: 1, debtor: 1, purchase: 1, asset: 1 }
             };
             this.save(defaultData);
         }
@@ -107,32 +96,57 @@ const DB = {
         const data = this.getAll();
         purchase.id = this.getNextId('purchase', data);
         purchase.date = purchase.date || todayJalali();
-        purchase.qty = Number(purchase.qty) || 0;
-        purchase.unitPrice = Number(purchase.unitPrice) || 0;
-        purchase.total = purchase.qty * purchase.unitPrice;
+
+        // Support both old single-item and new multi-item formats
+        if (purchase.items && purchase.items.length > 0) {
+            // Multi-item purchase
+            purchase.items.forEach(item => {
+                item.productName = (item.productName || '').trim();
+                item.category = (item.category || 'سایر').trim();
+                item.qty = Number(item.qty) || 0;
+                item.unitPrice = Number(item.unitPrice) || 0;
+                item.sellPrice = Number(item.sellPrice) || item.unitPrice;
+                item.lineTotal = item.qty * item.unitPrice;
+            });
+            purchase.total = purchase.items.reduce((sum, item) => sum + item.lineTotal, 0);
+        } else {
+            // Legacy single-item format (backward compat)
+            purchase.items = [{
+                productName: purchase.productName || '',
+                category: purchase.category || 'سایر',
+                qty: Number(purchase.qty) || 0,
+                unitPrice: Number(purchase.unitPrice) || 0,
+                sellPrice: Number(purchase.sellPrice) || (Number(purchase.unitPrice) || 0),
+                lineTotal: (Number(purchase.qty) || 0) * (Number(purchase.unitPrice) || 0)
+            }];
+            purchase.total = purchase.items[0].lineTotal;
+        }
+
         purchase.paid = Number(purchase.paid) || 0;
         purchase.remaining = purchase.total - purchase.paid;
         if (purchase.remaining < 0) purchase.remaining = 0;
 
-        // Add or update product in inventory
-        const purchaseSellPrice = Number(purchase.sellPrice) || purchase.unitPrice;
-        let product = data.products.find(p => p.name === purchase.productName && p.buyPrice === purchase.unitPrice && p.sellPrice === purchaseSellPrice);
-        if (product) {
-            product.stock += purchase.qty;
-            if (purchase.unitPrice > 0) product.buyPrice = purchase.unitPrice;
-            purchase.productId = product.id;
-        } else {
-            const newProduct = {
-                id: this.getNextId('product', data),
-                name: purchase.productName,
-                category: purchase.category || 'سایر',
-                buyPrice: purchase.unitPrice,
-                sellPrice: purchaseSellPrice,
-                stock: purchase.qty
-            };
-            data.products.push(newProduct);
-            purchase.productId = newProduct.id;
-        }
+        // Add or update each item's product in inventory
+        purchase.items.forEach(item => {
+            if (!item.productName) return;
+            let product = data.products.find(p => p.name === item.productName && p.buyPrice === item.unitPrice && p.sellPrice === item.sellPrice);
+            if (product) {
+                product.stock += item.qty;
+                if (item.unitPrice > 0) product.buyPrice = item.unitPrice;
+                item.productId = product.id;
+            } else {
+                const newProduct = {
+                    id: this.getNextId('product', data),
+                    name: item.productName,
+                    category: item.category,
+                    buyPrice: item.unitPrice,
+                    sellPrice: item.sellPrice,
+                    stock: item.qty
+                };
+                data.products.push(newProduct);
+                item.productId = newProduct.id;
+            }
+        });
 
         // Add to market debt if not fully paid
         if (purchase.remaining > 0) {
@@ -141,9 +155,10 @@ const DB = {
 
         // Add expense transaction for paid amount
         if (purchase.paid > 0) {
+            const itemNames = purchase.items.map(i => i.productName).join('، ');
             const tr = {
                 type: 'expense',
-                description: `خریداری: ${purchase.productName} (${purchase.qty} عدد) از ${purchase.supplier || 'بازار'}`,
+                description: `خریداری: ${itemNames} از ${purchase.supplier || 'بازار'}`,
                 amount: purchase.paid,
                 category: 'خرید جنس',
                 date: purchase.date,
@@ -162,12 +177,16 @@ const DB = {
         const data = this.getAll();
         const purchase = data.purchases.find(p => p.id === id);
         if (purchase) {
-            // Reverse stock
-            const product = data.products.find(p => p.id === purchase.productId);
-            if (product) {
-                product.stock -= purchase.qty;
-                if (product.stock < 0) product.stock = 0;
-            }
+            // Reverse stock for each item
+            const items = purchase.items || [];
+            items.forEach(item => {
+                if (!item.productId) return;
+                const product = data.products.find(p => p.id === item.productId);
+                if (product) {
+                    product.stock -= item.qty;
+                    if (product.stock < 0) product.stock = 0;
+                }
+            });
             // Reverse market debt
             if (purchase.remaining > 0) {
                 data.marketDebt = (data.marketDebt || 0) - purchase.remaining;

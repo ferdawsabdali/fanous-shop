@@ -1129,60 +1129,122 @@ function saveMarketDebt() {
 }
 
 // ==================== PURCHASES ====================
+let purchaseItems = [];
+
 function loadPurchases() {
     renderPurchases(DB.getPurchases());
 }
 
 function renderPurchases(list) {
-    $('purchasesTable').innerHTML = list.map(p => `
+    $('purchasesTable').innerHTML = list.map(p => {
+        const itemCount = (p.items || []).length;
+        const firstItem = (p.items && p.items[0]) ? p.items[0].productName : (p.productName || '-');
+        const itemLabel = itemCount > 1 ? `${firstItem} و ${itemCount - 1} مورد دیگر` : firstItem;
+        return `
         <tr>
             <td>#${p.id}</td>
-            <td>${p.productName}</td>
-            <td>${p.qty}</td>
-            <td>${formatMoney(p.unitPrice)}</td>
-            <td>${formatMoney(p.total)}</td>
-            <td>${formatMoney(p.paid)}</td>
-            <td><span class="badge badge-${p.remaining > 0 ? 'danger' : 'success'}">${formatMoney(p.remaining)}</span></td>
+            <td>${itemLabel}</td>
             <td>${p.supplier || '-'}</td>
             <td>${toPersianDate(p.date)}</td>
+            <td><strong>${formatMoney(p.total)}</strong></td>
+            <td>${formatMoney(p.paid)}</td>
+            <td><span class="badge badge-${p.remaining > 0 ? 'danger' : 'success'}">${formatMoney(p.remaining)}</span></td>
             <td>
-                <button class="btn btn-sm btn-success" onclick="payPurchase(${p.id})">💰 پرداخت</button>
+                <button class="btn btn-sm btn-primary" onclick="viewPurchase(${p.id})">👁️</button>
+                <button class="btn btn-sm btn-success" onclick="payPurchase(${p.id})">💰</button>
                 <button class="btn btn-sm btn-danger" onclick="deletePurchase(${p.id})">🗑️</button>
             </td>
-        </tr>
-    `).reverse().join('') || '<tr><td colspan="10" style="text-align:center">خریداری ثبت نشده</td></tr>';
+        </tr>`;
+    }).reverse().join('') || '<tr><td colspan="8" style="text-align:center">خریداری ثبت نشده</td></tr>';
 }
 
 $('addPurchaseBtn').onclick = () => {
+    purchaseItems = [];
     const products = DB.getProducts();
     const cats = [...new Set(products.map(p => p.category))];
     const options = products.map(p => `<option value="${p.name}">${p.name} (${p.category})</option>`).join('');
     Modal.open('خریداری جدید از بازار', `
-        <div class="form-group"><label>نام جنس</label><input type="text" id="pName" class="form-control" list="pList"><datalist id="pList">${options}</datalist></div>
-        <div class="form-group"><label>دسته‌بندی (برای محصول جدید)</label><select id="pCategory" class="form-control">${cats.map(c => `<option>${c}</option>`).join('')}<option>سایر</option></select></div>
-        <div class="form-group"><label>تعداد</label><input type="number" id="pQty" class="form-control" value="1" min="1"></div>
-        <div class="form-group"><label>قیمت خرید واحد (افغانی)</label><input type="number" id="pBuyPrice" class="form-control" value="0"></div>
-        <div class="form-group"><label>قیمت فروش واحد (افغانی - اختیاری)</label><input type="number" id="pSellPrice" class="form-control" value="0"></div>
-        <div class="form-group"><label>پرداخت‌شده (افغانی)</label><input type="number" id="pPaid" class="form-control" value="0"></div>
         <div class="form-group"><label>فروشنده / تأمین‌کننده</label><input type="text" id="pSupplier" class="form-control"></div>
         <div class="form-group"><label>تاریخ (شمسی)</label><input type="text" id="pDate" class="form-control" placeholder="1403-05-01" value="${todayJalali()}"></div>
         <div class="form-group"><label>توضیحات</label><input type="text" id="pNotes" class="form-control"></div>
+        <div class="invoice-items">
+            <div class="form-group"><label>افزودن جنس</label>
+                <input type="text" id="pName" class="form-control" list="pList" placeholder="نام جنس">
+                <datalist id="pList">${options}</datalist>
+            </div>
+            <div class="form-group"><label>دسته‌بندی</label><select id="pCategory" class="form-control">${cats.map(c => `<option>${c}</option>`).join('')}<option>سایر</option></select></div>
+            <div style="display:flex;gap:10px">
+                <input type="number" id="pQty" class="form-control" placeholder="تعداد" value="1" min="1" style="width:80px">
+                <input type="number" id="pBuyPrice" class="form-control" placeholder="قیمت خرید واحد" value="0" style="width:120px">
+                <input type="number" id="pSellPrice" class="form-control" placeholder="قیمت فروش واحد" value="0" style="width:120px">
+                <button class="btn btn-success" onclick="addPurchaseItem()">+ اضافه</button>
+            </div>
+            <div id="purchaseItemsList" style="margin-top:15px"></div>
+        </div>
+        <div class="form-group"><label>پرداخت‌شده (افغانی)</label><input type="number" id="pPaid" class="form-control" value="0" oninput="calcPurchaseTotal()"></div>
+        <div class="invoice-total">مبلغ کل: <span id="pTotal">0</span> افغانی</div>
+        <div class="invoice-total" style="color:#dc2626">باقی‌مانده (قروض): <span id="pRemaining">0</span> افغانی</div>
     `, '<button class="btn btn-primary" onclick="savePurchase()">ثبت خریداری</button>');
 };
 
-function savePurchase() {
+function addPurchaseItem() {
     const productName = $('pName').value.trim();
     const qty = Number($('pQty').value) || 0;
     const unitPrice = Number($('pBuyPrice').value) || 0;
+    const sellPrice = Number($('pSellPrice').value) || unitPrice;
+    if (!productName || qty <= 0 || unitPrice <= 0) return alert('لطفاً نام جنس، تعداد و قیمت خرید را وارد کنید');
+
+    const existing = purchaseItems.find(i => i.productName === productName && i.unitPrice === unitPrice);
+    if (existing) {
+        existing.qty += qty;
+        if (sellPrice > 0) existing.sellPrice = sellPrice;
+    } else {
+        purchaseItems.push({ productName, category: $('pCategory').value, qty, unitPrice, sellPrice, lineTotal: qty * unitPrice });
+    }
+    // Reset inputs for next item
+    $('pName').value = '';
+    $('pQty').value = '1';
+    $('pBuyPrice').value = '0';
+    $('pSellPrice').value = '0';
+    renderPurchaseItems();
+}
+
+function renderPurchaseItems() {
+    $('purchaseItemsList').innerHTML = purchaseItems.map((item, i) => `
+        <div class="invoice-item">
+            <span>${item.productName}</span>
+            <span>${item.qty} عدد</span>
+            <span>خرید: ${formatMoney(item.unitPrice)}</span>
+            <span>فروش: ${formatMoney(item.sellPrice)}</span>
+            <span><strong>${formatMoney(item.lineTotal)}</strong></span>
+            <button class="btn btn-sm btn-danger" onclick="removePurchaseItem(${i})">×</button>
+        </div>
+    `).join('');
+    calcPurchaseTotal();
+}
+
+function removePurchaseItem(idx) {
+    purchaseItems.splice(idx, 1);
+    renderPurchaseItems();
+}
+
+function calcPurchaseTotal() {
+    const total = purchaseItems.reduce((sum, i) => sum + i.lineTotal, 0);
+    if ($('pTotal')) $('pTotal').textContent = total.toLocaleString('fa-AF');
+    const paid = Number($('pPaid')?.value || 0);
+    const remaining = total - paid;
+    if ($('pRemaining')) $('pRemaining').textContent = (remaining > 0 ? remaining : 0).toLocaleString('fa-AF');
+}
+
+function savePurchase() {
+    if (purchaseItems.length === 0) return alert('حداقل یک جنس اضافه کنید');
+    const total = purchaseItems.reduce((sum, i) => sum + i.lineTotal, 0);
     const paid = Number($('pPaid').value) || 0;
-    if (!productName || qty <= 0 || unitPrice <= 0) return alert('لطفاً نام جنس، تعداد و قیمت را وارد کنید');
+    if (paid < 0 || paid > total) return alert('مبلغ پرداخت‌شده نامعتبر است');
 
     DB.addPurchase({
-        productName,
-        category: $('pCategory').value,
-        qty,
-        unitPrice,
-        sellPrice: Number($('pSellPrice').value) || unitPrice,
+        items: purchaseItems.map(i => ({ productName: i.productName, category: i.category, qty: i.qty, unitPrice: i.unitPrice, sellPrice: i.sellPrice, lineTotal: i.lineTotal })),
+        total,
         paid,
         supplier: $('pSupplier').value,
         date: $('pDate').value,
@@ -1195,15 +1257,79 @@ function savePurchase() {
     loadDashboard();
 }
 
+function viewPurchase(id) {
+    const p = DB.getPurchases().find(x => x.id === id);
+    if (!p) return;
+    const shopName = 'لوازم برق و صنعت فانوس';
+    const items = p.items || [];
+    const itemsRows = items.map(i => `
+        <tr>
+            <td>${i.productName}</td>
+            <td><span class="badge badge-info">${i.category || '-'}</span></td>
+            <td style="text-align:center">${i.qty}</td>
+            <td style="text-align:left">${formatMoney(i.unitPrice)}</td>
+            <td style="text-align:left">${formatMoney(i.sellPrice)}</td>
+            <td style="text-align:left"><strong>${formatMoney(i.lineTotal)}</strong></td>
+        </tr>
+    `).join('');
+
+    Modal.open(`فاکتور خریداری #${id}`, `
+        <div class="invoice-box" dir="rtl">
+            <div class="invoice-header" style="text-align:center;border-bottom:2px solid #059669;padding-bottom:1rem;margin-bottom:1rem;">
+                <h2 style="margin:0;color:#059669">${shopName}</h2>
+                <p style="margin:0.25rem 0 0;font-size:13px;color:#64748b">فاکتور خریداری کالا</p>
+            </div>
+            <div class="invoice-meta" style="display:flex;justify-content:space-between;flex-wrap:wrap;gap:1rem;font-size:13px;margin-bottom:1rem;">
+                <div><strong>شماره فاکتور:</strong> #${p.id}</div>
+                <div><strong>تاریخ:</strong> ${toPersianDate(p.date)}</div>
+            </div>
+            <div class="invoice-supplier" style="background:#f0fdf4;border:1px solid #bbf7d0;border-radius:8px;padding:0.75rem 1rem;margin-bottom:1rem;font-size:13px;">
+                <div><strong>فروشنده / تأمین‌کننده:</strong> ${p.supplier || '-'}</div>
+                ${p.notes ? `<div><strong>توضیحات:</strong> ${p.notes}</div>` : ''}
+            </div>
+            <table class="table invoice-table" style="margin-bottom:1rem;font-size:13px;">
+                <thead>
+                    <tr style="background:#059669;color:#fff">
+                        <th>نام جنس</th>
+                        <th>دسته‌بندی</th>
+                        <th style="text-align:center;width:70px">تعداد</th>
+                        <th style="text-align:left;width:110px">قیمت خرید</th>
+                        <th style="text-align:left;width:110px">قیمت فروش</th>
+                        <th style="text-align:left;width:110px">جمع</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    ${itemsRows}
+                </tbody>
+            </table>
+            <div class="invoice-summary" style="width:280px;margin-right:auto;margin-left:0;border-top:2px solid #bbf7d0;padding-top:0.75rem;font-size:13px;">
+                <div style="display:flex;justify-content:space-between;margin-bottom:0.35rem;font-weight:700;font-size:15px;color:#059669"><span>مبلغ کل:</span><span>${formatMoney(p.total)}</span></div>
+                <div style="display:flex;justify-content:space-between;margin-bottom:0.35rem"><span>پرداخت‌شده:</span><span>${formatMoney(p.paid)}</span></div>
+                <div style="display:flex;justify-content:space-between;color:#dc2626;font-weight:700"><span>باقی‌مانده (قروض):</span><span>${formatMoney(p.remaining)}</span></div>
+            </div>
+            <div class="invoice-footer" style="margin-top:2rem;display:flex;justify-content:space-between;font-size:12px;color:#64748b;border-top:1px dashed #cbd5e1;padding-top:1rem;">
+                <div>امضای خریدار: _______________</div>
+                <div>امضای فروشنده: _______________</div>
+            </div>
+        </div>
+    `, '<button class="btn btn-secondary no-print" onclick="window.print()">🖨️ پرینت فاکتور</button>');
+}
+
 $('searchPurchase').oninput = e => {
     const term = e.target.value.toLowerCase();
-    renderPurchases(DB.getPurchases().filter(p => p.productName.toLowerCase().includes(term) || (p.supplier || '').toLowerCase().includes(term)));
+    renderPurchases(DB.getPurchases().filter(p => {
+        const items = p.items || [];
+        const namesMatch = items.some(i => i.productName.toLowerCase().includes(term));
+        const supplierMatch = (p.supplier || '').toLowerCase().includes(term);
+        return namesMatch || supplierMatch;
+    }));
 };
 
 function payPurchase(id) {
     const p = DB.getPurchases().find(x => x.id === id);
+    const itemNames = (p.items || []).map(i => i.productName).join('، ');
     Modal.open('پرداخت باقی‌مانده خریداری', `
-        <p>جنس: ${p.productName} (${p.qty} عدد)</p>
+        <p>اقلام: ${itemNames}</p>
         <p>قروض بازار باقی‌مانده: ${formatMoney(p.remaining)}</p>
         <div class="form-group"><label>مبلغ پرداخت (افغانی)</label><input type="number" id="purPayAmt" class="form-control"></div>
         <div class="form-group"><label>تاریخ (شمسی)</label><input type="text" id="purPayDate" class="form-control" placeholder="1403-05-01" value="${todayJalali()}"></div>
@@ -1225,9 +1351,10 @@ function savePurchasePayment(id) {
     if (data.marketDebt < 0) data.marketDebt = 0;
 
     // Add expense transaction
+    const itemNames = (p.items || []).map(i => i.productName).join('، ');
     const tr = {
         type: 'expense',
-        description: `پرداخت قروض بازار: ${p.productName} از ${p.supplier || 'بازار'}`,
+        description: `پرداخت قروض بازار: ${itemNames} از ${p.supplier || 'بازار'}`,
         amount,
         category: 'خرید جنس',
         date: $('purPayDate').value,
@@ -1574,41 +1701,39 @@ function renderPurchasesReport(content, summary) {
                     <thead>
                         <tr>
                             <th>#</th>
-                            <th>نام محصول</th>
-                            <th>دسته‌بندی</th>
-                            <th>تعداد</th>
-                            <th>قیمت واحد</th>
+                            <th>اقلام</th>
+                            <th>تأمین‌کننده</th>
+                            <th>تاریخ</th>
                             <th>مبلغ کل</th>
                             <th>پرداخت‌شده</th>
                             <th>باقی‌مانده (قروض)</th>
-                            <th>تأمین‌کننده</th>
-                            <th>تاریخ</th>
                         </tr>
                     </thead>
                     <tbody>
-                        ${purchases.length ? purchases.map(p => `
+                        ${purchases.length ? purchases.map(p => {
+                            const items = p.items || [];
+                            const itemCount = items.length;
+                            const firstItem = items[0] ? items[0].productName : (p.productName || '-');
+                            const itemLabel = itemCount > 1 ? `${firstItem} و ${itemCount - 1} مورد دیگر` : firstItem;
+                            return `
                             <tr>
                                 <td>#${p.id}</td>
-                                <td>${p.productName}</td>
-                                <td><span class="badge badge-info">${p.category || '-'}</span></td>
-                                <td>${p.qty}</td>
-                                <td>${formatMoney(p.unitPrice)}</td>
+                                <td>${itemLabel}</td>
+                                <td>${p.supplier || '-'}</td>
+                                <td>${toPersianDate(p.date)}</td>
                                 <td><strong>${formatMoney(p.total)}</strong></td>
                                 <td>${formatMoney(p.paid)}</td>
                                 <td><span class="badge badge-${p.remaining > 0 ? 'danger' : 'success'}">${formatMoney(p.remaining)}</span></td>
-                                <td>${p.supplier || '-'}</td>
-                                <td>${toPersianDate(p.date)}</td>
-                            </tr>
-                        `).join('') : '<tr><td colspan="10" class="report-empty"><div class="empty-icon">📭</div>خریداری در این بازه ثبت نشده</td></tr>'}
+                            </tr>`;
+                        }).join('') : '<tr><td colspan="7" class="report-empty"><div class="empty-icon">📭</div>خریداری در این بازه ثبت نشده</td></tr>'}
                     </tbody>
                     ${purchases.length ? `
                     <tfoot>
                         <tr>
-                            <td colspan="5">جمع کل (${count} خرید)</td>
+                            <td colspan="4">جمع کل (${count} فاکتور)</td>
                             <td>${formatMoney(totalPurchases)}</td>
                             <td>${formatMoney(totalPaid)}</td>
                             <td>${formatMoney(totalRemaining)}</td>
-                            <td colspan="2"></td>
                         </tr>
                     </tfoot>` : ''}
                 </table>
@@ -1618,7 +1743,7 @@ function renderPurchasesReport(content, summary) {
 
     summary.innerHTML = `
         <div class="summary-card info">
-            <div class="summary-label">تعداد خریدها</div>
+            <div class="summary-label">تعداد فاکتورها</div>
             <div class="summary-value">${count}</div>
         </div>
         <div class="summary-card">
@@ -2228,10 +2353,10 @@ const SECTION_COLUMNS = {
         reload: loadInventory
     },
     purchases: {
-        headers: ['شماره', 'تاریخ', 'نام جنس', 'تعداد', 'قیمت خرید واحد', 'قیمت فروش واحد', 'مبلغ کل', 'پرداخت‌شده', 'باقی‌مانده', 'فروشنده', 'دسته‌بندی', 'توضیحات'],
-        keys: ['id', 'date', 'productName', 'qty', 'unitPrice', 'sellPrice', 'total', 'paid', 'remaining', 'supplier', 'category', 'notes'],
-        getData: () => DB.getPurchases(),
-        addRow: (row) => DB.addPurchase({ productName: row['نام جنس'] || '', qty: Number(row['تعداد']) || 0, unitPrice: Number(row['قیمت خرید واحد']) || 0, sellPrice: Number(row['قیمت فروش واحد']) || 0, paid: Number(row['پرداخت‌شده']) || 0, supplier: row['فروشنده'] || '', date: row['تاریخ'] || todayJalali(), category: row['دسته‌بندی'] || 'سایر', notes: row['توضیحات'] || '' }),
+        headers: ['شماره', 'تاریخ', 'فروشنده', 'مبلغ کل', 'پرداخت‌شده', 'باقی‌مانده', 'اقلام'],
+        keys: ['id', 'date', 'supplier', 'total', 'paid', 'remaining', '_itemsText'],
+        getData: () => DB.getPurchases().map(p => ({ ...p, _itemsText: (p.items || []).map(i => `${i.productName}×${i.qty}@${i.unitPrice}`).join(' | ') })),
+        addRow: null, // Purchases have nested items — import not supported via simple Excel
         reload: () => { loadPurchases(); loadInventory(); loadFinance(); }
     },
     sales: {
