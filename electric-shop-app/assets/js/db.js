@@ -115,7 +115,8 @@ const DB = {
         if (purchase.remaining < 0) purchase.remaining = 0;
 
         // Add or update product in inventory
-        let product = data.products.find(p => p.name === purchase.productName && p.buyPrice === purchase.unitPrice);
+        const purchaseSellPrice = Number(purchase.sellPrice) || purchase.unitPrice;
+        let product = data.products.find(p => p.name === purchase.productName && p.buyPrice === purchase.unitPrice && p.sellPrice === purchaseSellPrice);
         if (product) {
             product.stock += purchase.qty;
             if (purchase.unitPrice > 0) product.buyPrice = purchase.unitPrice;
@@ -126,7 +127,7 @@ const DB = {
                 name: purchase.productName,
                 category: purchase.category || 'سایر',
                 buyPrice: purchase.unitPrice,
-                sellPrice: Number(purchase.sellPrice) || purchase.unitPrice,
+                sellPrice: purchaseSellPrice,
                 stock: purchase.qty
             };
             data.products.push(newProduct);

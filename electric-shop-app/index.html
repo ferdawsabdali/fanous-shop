@@ -228,6 +228,9 @@
                 <div class="page" id="inventory">
                     <div class="page-actions">
                         <button class="btn btn-primary" id="addProductBtn">+ افزودن محصول</button>
+                        <button class="btn btn-success btn-sm" onclick="exportSectionExcel('inventory')" title="خروجی اکسل">📊 خروجی</button>
+                        <input type="file" id="importInventoryFile" accept=".xlsx,.xls" hidden onchange="importSectionExcel('inventory', this)">
+                        <button class="btn btn-warning btn-sm" onclick="document.getElementById('importInventoryFile').click()" title="ورودی اکسل">📥 ورودی</button>
                         <input type="text" class="search-input" id="searchProduct" placeholder="جستجوی محصول...">
                     </div>
                     <div class="card">
@@ -254,6 +257,9 @@
                 <div class="page" id="purchases">
                     <div class="page-actions">
                         <button class="btn btn-primary" id="addPurchaseBtn">+ خریداری جدید</button>
+                        <button class="btn btn-success btn-sm" onclick="exportSectionExcel('purchases')" title="خروجی اکسل">📊 خروجی</button>
+                        <input type="file" id="importPurchasesFile" accept=".xlsx,.xls" hidden onchange="importSectionExcel('purchases', this)">
+                        <button class="btn btn-warning btn-sm" onclick="document.getElementById('importPurchasesFile').click()" title="ورودی اکسل">📥 ورودی</button>
                         <input type="text" class="search-input" id="searchPurchase" placeholder="جستجوی خریداری...">
                     </div>
                     <div class="card">
@@ -283,6 +289,9 @@
                 <div class="page" id="sales">
                     <div class="page-actions">
                         <button class="btn btn-primary" id="newSaleBtn">+ فاکتور جدید</button>
+                        <button class="btn btn-success btn-sm" onclick="exportSectionExcel('sales')" title="خروجی اکسل">📊 خروجی</button>
+                        <input type="file" id="importSalesFile" accept=".xlsx,.xls" hidden onchange="importSectionExcel('sales', this)">
+                        <button class="btn btn-warning btn-sm" onclick="document.getElementById('importSalesFile').click()" title="ورودی اکسل">📥 ورودی</button>
                         <input type="text" class="search-input" id="searchSale" placeholder="جستجوی فاکتور...">
                     </div>
                     <div class="card">
@@ -311,6 +320,9 @@
                 <div class="page" id="repairs">
                     <div class="page-actions">
                         <button class="btn btn-primary" id="newRepairBtn">+ تعمیر جدید</button>
+                        <button class="btn btn-success btn-sm" onclick="exportSectionExcel('repairs')" title="خروجی اکسل">📊 خروجی</button>
+                        <input type="file" id="importRepairsFile" accept=".xlsx,.xls" hidden onchange="importSectionExcel('repairs', this)">
+                        <button class="btn btn-warning btn-sm" onclick="document.getElementById('importRepairsFile').click()" title="ورودی اکسل">📥 ورودی</button>
                         <input type="text" class="search-input" id="searchRepair" placeholder="جستجوی تعمیر...">
                     </div>
                     <div class="card">
@@ -340,6 +352,9 @@
                 <div class="page" id="projects">
                     <div class="page-actions">
                         <button class="btn btn-primary" id="newProjectBtn">+ پروژه جدید</button>
+                        <button class="btn btn-success btn-sm" onclick="exportSectionExcel('projects')" title="خروجی اکسل">📊 خروجی</button>
+                        <input type="file" id="importProjectsFile" accept=".xlsx,.xls" hidden onchange="importSectionExcel('projects', this)">
+                        <button class="btn btn-warning btn-sm" onclick="document.getElementById('importProjectsFile').click()" title="ورودی اکسل">📥 ورودی</button>
                         <input type="text" class="search-input" id="searchProject" placeholder="جستجوی پروژه...">
                     </div>
                     <div class="card">
@@ -368,6 +383,9 @@
                 <div class="page" id="employees">
                     <div class="page-actions">
                         <button class="btn btn-primary" id="addEmployeeBtn">+ افزودن شخص</button>
+                        <button class="btn btn-success btn-sm" onclick="exportSectionExcel('employees')" title="خروجی اکسل">📊 خروجی</button>
+                        <input type="file" id="importEmployeesFile" accept=".xlsx,.xls" hidden onchange="importSectionExcel('employees', this)">
+                        <button class="btn btn-warning btn-sm" onclick="document.getElementById('importEmployeesFile').click()" title="ورودی اکسل">📥 ورودی</button>
                         <input type="text" class="search-input" id="searchEmployee" placeholder="جستجوی شخص...">
                     </div>
                     <div class="card">
@@ -417,6 +435,10 @@
                         </div>
                     </div>
                     <div class="page-actions">
+                        <button class="btn btn-success btn-sm" onclick="exportSectionExcel('debtors')" title="خروجی اکسل طلب‌کارها">📊 خروجی</button>
+                        <button class="btn btn-success btn-sm" onclick="exportSectionExcel('creditors')" title="خروجی اکسل بستانکاران">📊 خروجی قروض</button>
+                        <input type="file" id="importDebtorsFile" accept=".xlsx,.xls" hidden onchange="importSectionExcel('debtors', this)">
+                        <button class="btn btn-warning btn-sm" onclick="document.getElementById('importDebtorsFile').click()" title="ورودی اکسل">📥 ورودی</button>
                         <input type="text" class="search-input" id="searchDebtor" placeholder="جستجو...">
                     </div>
                     <div class="card">
@@ -502,6 +524,9 @@
                     </div>
                     <div class="page-actions">
                         <button class="btn btn-primary" id="addTransactionBtn">+ ثبت تراکنش</button>
+                        <button class="btn btn-success btn-sm" onclick="exportSectionExcel('transactions')" title="خروجی اکسل">📊 خروجی</button>
+                        <input type="file" id="importTransactionsFile" accept=".xlsx,.xls" hidden onchange="importSectionExcel('transactions', this)">
+                        <button class="btn btn-warning btn-sm" onclick="document.getElementById('importTransactionsFile').click()" title="ورودی اکسل">📥 ورودی</button>
                         <input type="text" class="search-input" id="searchTransaction" placeholder="جستجوی تراکنش...">
                     </div>
                     <div class="card">
@@ -565,6 +590,9 @@
                     </div>
                     <div class="page-actions">
                         <button class="btn btn-primary" id="addAssetBtn">+ ثبت دارایی جدید</button>
+                        <button class="btn btn-success btn-sm" onclick="exportSectionExcel('assets')" title="خروجی اکسل">📊 خروجی</button>
+                        <input type="file" id="importAssetsFile" accept=".xlsx,.xls" hidden onchange="importSectionExcel('assets', this)">
+                        <button class="btn btn-warning btn-sm" onclick="document.getElementById('importAssetsFile').click()" title="ورودی اکسل">📥 ورودی</button>
                         <input type="text" class="search-input" id="searchAsset" placeholder="جستجوی دارایی...">
                     </div>
                     <div class="card">
@@ -756,8 +784,9 @@
         </div>
     </div>
 
-    <script src="assets/js/db.js?v=3"></script>
-    <script src="assets/js/cloud.js?v=3"></script>
-    <script src="assets/js/app.js?v=3"></script>
+    <script src="https://cdn.sheetjs.com/xlsx-0.20.3/package/dist/xlsx.full.min.js"></script>
+    <script src="assets/js/db.js?v=4"></script>
+    <script src="assets/js/cloud.js?v=4"></script>
+    <script src="assets/js/app.js?v=4"></script>
 </body>
 </html>

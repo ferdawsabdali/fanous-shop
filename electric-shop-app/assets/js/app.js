@@ -196,14 +196,26 @@ $('addProductBtn').onclick = () => {
 };
 
 function saveProduct() {
-    const name = $('pName').value;
+    const name = $('pName').value.trim();
     if (!name) return alert('نام محصول الزامی است');
-    DB.addProduct({
-        name, category: $('pCat').value,
-        buyPrice: Number($('pBuy').value) || 0,
-        sellPrice: Number($('pSell').value) || 0,
-        stock: Number($('pStock').value) || 0
-    });
+    const buyPrice = Number($('pBuy').value) || 0;
+    const sellPrice = Number($('pSell').value) || 0;
+    const addStock = Number($('pStock').value) || 0;
+
+    // Check if product with same name + buyPrice + sellPrice already exists
+    const existing = DB.getProducts().find(p => p.name === name && p.buyPrice === buyPrice && p.sellPrice === sellPrice);
+    if (existing) {
+        // Add to existing product's stock
+        DB.updateProduct(existing.id, { stock: existing.stock + addStock });
+        CloudSync._showSyncNotification(`✅ «${name}» به محصول موجود اضافه شد (موجودی: ${existing.stock + addStock})`);
+    } else {
+        // Create new product
+        DB.addProduct({
+            name, category: $('pCat').value,
+            buyPrice, sellPrice, stock: addStock
+        });
+        CloudSync._showSyncNotification(`✅ محصول جدید «${name}» ثبت شد`);
+    }
     Modal.close();
     loadInventory();
 }
@@ -2204,6 +2216,157 @@ function submitPinLock() {
 $('pinLockInput').addEventListener('keydown', e => {
     if (e.key === 'Enter') submitPinLock();
 });
+
+// ==================== EXCEL IMPORT / EXPORT ====================
+
+const SECTION_COLUMNS = {
+    inventory: {
+        headers: ['شماره', 'نام محصول', 'دسته‌بندی', 'قیمت خرید', 'قیمت فروش', 'موجودی'],
+        keys: ['id', 'name', 'category', 'buyPrice', 'sellPrice', 'stock'],
+        getData: () => DB.getProducts(),
+        addRow: (row) => DB.addProduct({ name: row['نام محصول'] || '', category: row['دسته‌بندی'] || 'سایر', buyPrice: Number(row['قیمت خرید']) || 0, sellPrice: Number(row['قیمت فروش']) || 0, stock: Number(row['موجودی']) || 0 }),
+        reload: loadInventory
+    },
+    purchases: {
+        headers: ['شماره', 'تاریخ', 'نام جنس', 'تعداد', 'قیمت خرید واحد', 'قیمت فروش واحد', 'مبلغ کل', 'پرداخت‌شده', 'باقی‌مانده', 'فروشنده', 'دسته‌بندی', 'توضیحات'],
+        keys: ['id', 'date', 'productName', 'qty', 'unitPrice', 'sellPrice', 'total', 'paid', 'remaining', 'supplier', 'category', 'notes'],
+        getData: () => DB.getPurchases(),
+        addRow: (row) => DB.addPurchase({ productName: row['نام جنس'] || '', qty: Number(row['تعداد']) || 0, unitPrice: Number(row['قیمت خرید واحد']) || 0, sellPrice: Number(row['قیمت فروش واحد']) || 0, paid: Number(row['پرداخت‌شده']) || 0, supplier: row['فروشنده'] || '', date: row['تاریخ'] || todayJalali(), category: row['دسته‌بندی'] || 'سایر', notes: row['توضیحات'] || '' }),
+        reload: () => { loadPurchases(); loadInventory(); loadFinance(); }
+    },
+    sales: {
+        headers: ['شماره', 'تاریخ', 'مشتری', 'شماره تماس', 'مبلغ کل', 'تخفیف', 'مبلغ پرداخت', 'پرداخت‌شده', 'بدهی', 'آیتم‌ها'],
+        keys: ['id', 'date', 'customer', 'phone', 'totalAmount', 'discount', 'payable', 'paid', 'debt', '_itemsText'],
+        getData: () => DB.getSales().map(s => ({ ...s, _itemsText: (s.items || []).map(i => `${i.name}×${i.qty}@${i.price}`).join(' | ') })),
+        addRow: null, // Sales have nested items — import not supported via simple Excel
+        reload: loadSales
+    },
+    repairs: {
+        headers: ['شماره', 'تاریخ دریافت', 'مشتری', 'دستگاه', 'مشکل', 'وضعیت', 'هزینه', 'پرداخت‌شده', 'باقی‌مانده', 'شماره تماس'],
+        keys: ['id', 'receiveDate', 'customer', 'device', 'issue', 'status', 'cost', 'paid', 'remaining', 'phone'],
+        getData: () => DB.getRepairs(),
+        addRow: (row) => DB.addRepair({ customer: row['مشتری'] || '', device: row['دستگاه'] || '', issue: row['مشکل'] || '', receiveDate: row['تاریخ دریافت'] || todayJalali(), status: row['وضعیت'] || 'دریافت‌شده', cost: Number(row['هزینه']) || 0, paid: Number(row['پرداخت‌شده']) || 0, phone: row['شماره تماس'] || '' }),
+        reload: loadRepairs
+    },
+    projects: {
+        headers: ['شماره', 'نام پروژه', 'مشتری', 'آدرس', 'تاریخ شروع', 'مبلغ قرارداد', 'پرداخت‌شده', 'وضعیت', 'شماره تماس', 'توضیحات'],
+        keys: ['id', 'name', 'client', 'address', 'startDate', 'amount', 'paid', 'status', 'phone', 'description'],
+        getData: () => DB.getProjects(),
+        addRow: (row) => DB.addProject({ name: row['نام پروژه'] || '', client: row['مشتری'] || '', address: row['آدرس'] || '', startDate: row['تاریخ شروع'] || todayJalali(), amount: Number(row['مبلغ قرارداد']) || 0, paid: Number(row['پرداخت‌شده']) || 0, status: row['وضعیت'] || 'شروع نشده', phone: row['شماره تماس'] || '', description: row['توضیحات'] || '' }),
+        reload: loadProjects
+    },
+    employees: {
+        headers: ['شماره', 'نام', 'نقش', 'شماره تماس', 'حقوق/سهم ماهانه', 'پرداخت‌شده', 'بدهکاری'],
+        keys: ['id', 'name', 'role', 'phone', 'salary', 'paid', 'debt'],
+        getData: () => DB.getEmployees(),
+        addRow: (row) => DB.addEmployee({ name: row['نام'] || '', role: row['نقش'] || 'کارمند', phone: row['شماره تماس'] || '', salary: Number(row['حقوق/سهم ماهانه']) || 0 }),
+        reload: loadEmployees
+    },
+    debtors: {
+        headers: ['نام', 'شماره تماس', 'مجموع بدهی', 'آخرین تاریخ', 'منابع'],
+        keys: ['name', 'phone', 'totalDebt', 'lastDate', '_sourcesText'],
+        getData: () => DB.getDebtors().map(d => ({ ...d, _sourcesText: (d.sources || []).map(s => `${s.type}#${s.id}: ${formatMoney(s.amount)}`).join(' | ') })),
+        addRow: null, // Debtors are dynamically computed — export-only
+        reload: loadDebtors
+    },
+    creditors: {
+        headers: ['نام', 'مجموع بدهی', 'منابع'],
+        keys: ['name', 'totalDebt', '_sourcesText'],
+        getData: () => DB.getCreditors().map(c => ({ ...c, _sourcesText: (c.sources || []).map(s => `${s.type}#${s.id}: ${formatMoney(s.amount)}`).join(' | ') })),
+        addRow: null, // Creditors are dynamically computed — export-only
+        reload: loadDebtors
+    },
+    transactions: {
+        headers: ['شماره', 'تاریخ', 'نوع', 'شرح', 'مبلغ', 'دسته‌بندی'],
+        keys: ['id', 'date', 'type', 'description', 'amount', 'category'],
+        getData: () => DB.getTransactions(),
+        addRow: (row) => DB.addTransaction({ type: row['نوع'] || 'expense', description: row['شرح'] || '', amount: Number(row['مبلغ']) || 0, category: row['دسته‌بندی'] || 'سایر', date: row['تاریخ'] || todayJalali() }),
+        reload: () => { txPage = 1; loadFinance(); }
+    },
+    assets: {
+        headers: ['شماره', 'نام دارایی', 'دسته‌بندی', 'تعداد', 'قیمت واحد', 'مبلغ کل', 'تاریخ خرید', 'فروشنده', 'وضعیت', 'توضیحات'],
+        keys: ['id', 'name', 'category', 'qty', 'unitPrice', 'total', 'purchaseDate', 'supplier', 'status', 'notes'],
+        getData: () => DB.getAssets(),
+        addRow: (row) => DB.addAsset({ name: row['نام دارایی'] || '', category: row['دسته‌بندی'] || 'سایر', qty: Number(row['تعداد']) || 1, unitPrice: Number(row['قیمت واحد']) || 0, purchaseDate: row['تاریخ خرید'] || todayJalali(), supplier: row['فروشنده'] || '', status: row['وضعیت'] || 'فعال', notes: row['توضیحات'] || '' }),
+        reload: () => { loadAssets(); loadFinance(); }
+    }
+};
+
+function exportSectionExcel(section) {
+    const cfg = SECTION_COLUMNS[section];
+    if (!cfg) return alert('بخش نامعتبر است');
+    const data = cfg.getData();
+    if (!data || data.length === 0) return alert('داده‌ای برای خروجی وجود ندارد');
+
+    // Build rows using Persian headers
+    const rows = data.map(item => {
+        const row = {};
+        cfg.headers.forEach((h, i) => {
+            const key = cfg.keys[i];
+            let val = item[key];
+            // Format money fields for readability
+            if (['buyPrice','sellPrice','unitPrice','total','paid','remaining','cost','amount','salary','debt','totalDebt','totalAmount','payable','discount'].includes(key) && val !== undefined && val !== null) {
+                val = Number(val);
+            }
+            row[h] = val !== undefined && val !== null ? val : '';
+        });
+        return row;
+    });
+
+    const ws = XLSX.utils.json_to_sheet(rows, { header: cfg.headers });
+    const wb = XLSX.utils.book_new();
+    XLSX.utils.book_append_sheet(wb, ws, section);
+    const fileName = `fanous_${section}_${todayJalali().replace(/-/g, '')}.xlsx`;
+    XLSX.writeFile(wb, fileName);
+    CloudSync._showSyncNotification(`✅ فایل اکسل «${section}» ذخیره شد`);
+}
+
+function importSectionExcel(section, fileInput) {
+    const cfg = SECTION_COLUMNS[section];
+    if (!cfg) return alert('بخش نامعتبر است');
+    if (!cfg.addRow) return alert('ورودی اکسل برای این بخش پشتیبانی نمی‌شود (فقط خروجی ممکن است)');
+
+    const file = fileInput.files[0];
+    if (!file) return;
+
+    const reader = new FileReader();
+    reader.onload = function(e) {
+        try {
+            const data = new Uint8Array(e.target.result);
+            const wb = XLSX.read(data, { type: 'array' });
+            const ws = wb.Sheets[wb.SheetNames[0]];
+            const json = XLSX.utils.sheet_to_json(ws);
+
+            if (json.length === 0) return alert('فایل اکسل خالی است');
+
+            let imported = 0, errors = 0;
+            json.forEach((row, idx) => {
+                try {
+                    cfg.addRow(row);
+                    imported++;
+                } catch(err) {
+                    console.error(`Row ${idx + 2} error:`, err);
+                    errors++;
+                }
+            });
+
+            if (cfg.reload) cfg.reload();
+            loadDashboard();
+
+            let msg = `✅ ${imported} ردیف وارد شد`;
+            if (errors > 0) msg += ` | ⚠️ ${errors} ردیف خطا`;
+            CloudSync._showSyncNotification(msg);
+        } catch(err) {
+            console.error('Excel import error:', err);
+            alert('خطا در خواندن فایل اکسل: ' + err.message);
+        }
+    };
+    reader.readAsArrayBuffer(file);
+    // Reset file input so same file can be re-selected
+    fileInput.value = '';
+}
+
+// ==================== END EXCEL IMPORT / EXPORT ====================
 
 // Date display
 $('currentDate').textContent = new Date().toLocaleDateString('fa-AF', { weekday: 'long', year: 'numeric', month: 'long', day: 'numeric' });
