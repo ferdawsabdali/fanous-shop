@@ -44,7 +44,8 @@ body {
     right: 0;
     top: 0;
     height: 100vh;
-    overflow-y: auto;
+    display: flex;
+    flex-direction: column;
     z-index: 1000;
     transition: transform 0.3s;
 }
@@ -55,6 +56,7 @@ body {
     align-items: center;
     justify-content: space-between;
     border-bottom: 1px solid rgba(255,255,255,0.1);
+    flex-shrink: 0;
 }
 
 .logo {
@@ -80,6 +82,8 @@ body {
 
 .sidebar-nav {
     padding: 15px 10px;
+    flex: 1;
+    overflow-y: auto;
 }
 
 .nav-link {
@@ -145,10 +149,8 @@ body {
     text-align: center;
     color: rgba(255,255,255,0.5);
     border-top: 1px solid rgba(255,255,255,0.1);
+    flex-shrink: 0;
     margin-top: auto;
-    position: absolute;
-    bottom: 0;
-    width: 100%;
 }
 
 /* Main Content */
