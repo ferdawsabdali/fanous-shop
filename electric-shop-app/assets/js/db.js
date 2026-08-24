@@ -102,7 +102,6 @@ const DB = {
             // Multi-item purchase
             purchase.items.forEach(item => {
                 item.productName = (item.productName || '').trim();
-                item.category = (item.category || 'سایر').trim();
                 item.qty = Number(item.qty) || 0;
                 item.unitPrice = Number(item.unitPrice) || 0;
                 item.sellPrice = Number(item.sellPrice) || item.unitPrice;
@@ -113,7 +112,6 @@ const DB = {
             // Legacy single-item format (backward compat)
             purchase.items = [{
                 productName: purchase.productName || '',
-                category: purchase.category || 'سایر',
                 qty: Number(purchase.qty) || 0,
                 unitPrice: Number(purchase.unitPrice) || 0,
                 sellPrice: Number(purchase.sellPrice) || (Number(purchase.unitPrice) || 0),
@@ -138,7 +136,6 @@ const DB = {
                 const newProduct = {
                     id: this.getNextId('product', data),
                     name: item.productName,
-                    category: item.category,
                     buyPrice: item.unitPrice,
                     sellPrice: item.sellPrice,
                     stock: item.qty
@@ -204,7 +201,6 @@ const DB = {
         const data = this.getAll();
         asset.id = this.getNextId('asset', data);
         asset.name = (asset.name || '').trim();
-        asset.category = (asset.category || 'سایر').trim();
         asset.qty = Number(asset.qty) || 1;
         asset.unitPrice = Number(asset.unitPrice) || 0;
         asset.total = asset.qty * asset.unitPrice;

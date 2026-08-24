@@ -166,7 +166,6 @@ function renderProducts(products) {
         <tr>
             <td>${p.id}</td>
             <td>${p.name}</td>
-            <td>${p.category}</td>
             <td>${formatMoney(p.buyPrice)}</td>
             <td>${formatMoney(p.sellPrice)}</td>
             <td><span class="badge badge-${p.stock < 10 ? 'danger' : p.stock < 30 ? 'warning' : 'success'}">${p.stock}</span></td>
@@ -180,15 +179,13 @@ function renderProducts(products) {
 
 $('searchProduct').oninput = e => {
     const term = e.target.value.toLowerCase();
-    renderProducts(DB.getProducts().filter(p => p.name.toLowerCase().includes(term) || p.category.includes(term)));
+    renderProducts(DB.getProducts().filter(p => p.name.toLowerCase().includes(term)));
 };
 
 $('addProductBtn').onclick = () => {
     Modal.open('افزودن محصول', `
         <div class="form-group"><label>نام محصول</label><input type="text" id="pName" class="form-control"></div>
-        <div class="form-group"><label>دسته‌بندی</label><select id="pCat" class="form-control">
-            <option>کلید و پریز</option><option>روشنایی</option><option>کابل و سیم</option><option>تجهیزات حفاظتی</option><option>ابزار برقی</option><option>سایر</option>
-        </select></div>
+
         <div class="form-group"><label>قیمت خرید (افغانی)</label><input type="number" id="pBuy" class="form-control"></div>
         <div class="form-group"><label>قیمت فروش (افغانی)</label><input type="number" id="pSell" class="form-control"></div>
         <div class="form-group"><label>موجودی اولیه</label><input type="number" id="pStock" class="form-control" value="0"></div>
@@ -211,7 +208,7 @@ function saveProduct() {
     } else {
         // Create new product
         DB.addProduct({
-            name, category: $('pCat').value,
+            name,
             buyPrice, sellPrice, stock: addStock
         });
         CloudSync._showSyncNotification(`✅ محصول جدید «${name}» ثبت شد`);
@@ -224,7 +221,6 @@ function editProduct(id) {
     const p = DB.getProduct(id);
     Modal.open('ویرایش محصول', `
         <div class="form-group"><label>نام محصول</label><input type="text" id="pName" class="form-control" value="${p.name}"></div>
-        <div class="form-group"><label>دسته‌بندی</label><input type="text" id="pCat" class="form-control" value="${p.category}"></div>
         <div class="form-group"><label>قیمت خرید</label><input type="number" id="pBuy" class="form-control" value="${p.buyPrice}"></div>
         <div class="form-group"><label>قیمت فروش</label><input type="number" id="pSell" class="form-control" value="${p.sellPrice}"></div>
         <div class="form-group"><label>موجودی</label><input type="number" id="pStock" class="form-control" value="${p.stock}"></div>
@@ -234,7 +230,6 @@ function editProduct(id) {
 function updateProduct(id) {
     DB.updateProduct(id, {
         name: $('pName').value,
-        category: $('pCat').value,
         buyPrice: Number($('pBuy').value),
         sellPrice: Number($('pSell').value),
         stock: Number($('pStock').value)
@@ -469,7 +464,7 @@ function renderRepairs(repairs) {
                 <button class="btn btn-sm btn-danger" onclick="deleteRepair(${r.id})">🗑️</button>
             </td>
         </tr>
-    `}).join('') || '<tr><td colspan="10" style="text-align:center">تعمیراتی ثبت نشده</td></tr>';
+    `}).join('') || '<tr><td colspan="9" style="text-align:center">تعمیراتی ثبت نشده</td></tr>';
 }
 
 $('searchRepair').oninput = e => {
@@ -941,7 +936,6 @@ $('searchTransaction').oninput = e => {
     const q = e.target.value.trim();
     const filtered = allTransactions.filter(t =>
         (t.description || '').includes(q) ||
-        (t.category || '').includes(q) ||
         (t.date || '').includes(q) ||
         String(t.amount).includes(q) ||
         (t.type === 'income' ? 'درآمد' : 'هزینه').includes(q)
@@ -964,10 +958,9 @@ function renderTransactions(list) {
             <td><span class="badge badge-${t.type === 'income' ? 'success' : 'danger'}">${t.type === 'income' ? 'درآمد' : 'هزینه'}</span></td>
             <td>${t.description}</td>
             <td>${formatMoney(t.amount)}</td>
-            <td>${t.category}</td>
             <td><button class="btn btn-sm btn-danger" onclick="deleteTransaction(${t.id})">🗑️</button></td>
         </tr>
-    `).join('') || '<tr><td colspan="6" style="text-align:center">تراکنشی ثبت نشده</td></tr>';
+    `).join('') || '<tr><td colspan="5" style="text-align:center">تراکنشی ثبت نشده</td></tr>';
 
     let paginationHtml = '';
     if (totalPages > 1) {
@@ -988,9 +981,6 @@ $('addTransactionBtn').onclick = () => {
         <div class="form-group"><label>نوع</label><select id="tType" class="form-control"><option value="income">درآمد</option><option value="expense">هزینه</option></select></div>
         <div class="form-group"><label>شرح</label><input type="text" id="tDesc" class="form-control"></div>
         <div class="form-group"><label>مبلغ (افغانی)</label><input type="number" id="tAmount" class="form-control"></div>
-        <div class="form-group"><label>دسته‌بندی</label><select id="tCat" class="form-control">
-            <option>فروش</option><option>تعمیرات</option><option>پروژه</option><option>حقوق و دستمزد</option><option>خرید جنس</option><option>اجاره</option><option>سوخت و حمل</option><option>سایر</option>
-        </select></div>
         <div class="form-group"><label>تاریخ (شمسی)</label><input type="text" id="tDate" class="form-control" placeholder="1403-05-01" value="${todayJalali()}"></div>
     `, '<button class="btn btn-primary" onclick="saveTransaction()">ثبت</button>');
 };
@@ -1003,7 +993,6 @@ function saveTransaction() {
         type: $('tType').value,
         description: desc,
         amount,
-        category: $('tCat').value,
         date: $('tDate').value
     });
     Modal.close();
@@ -1049,7 +1038,7 @@ function renderDebtors(debtors) {
                 <button class="btn btn-sm btn-success" onclick='payDebtor(${JSON.stringify(d.id)})'>💰 پرداخت</button>
             </td>
         </tr>
-    `).join('') || '<tr><td colspan="6" style="text-align:center">قرض‌داری ثبت نشده</td></tr>';
+    `).join('') || '<tr><td colspan="5" style="text-align:center">قرض‌داری ثبت نشده</td></tr>';
 }
 
 function renderCreditors(creditors) {
@@ -1161,8 +1150,7 @@ function renderPurchases(list) {
 $('addPurchaseBtn').onclick = () => {
     purchaseItems = [];
     const products = DB.getProducts();
-    const cats = [...new Set(products.map(p => p.category))];
-    const options = products.map(p => `<option value="${p.name}">${p.name} (${p.category})</option>`).join('');
+    const options = products.map(p => `<option value="${p.name}">${p.name}</option>`).join('');
     Modal.open('خریداری جدید از بازار', `
         <div class="form-group"><label>فروشنده / تأمین‌کننده</label><input type="text" id="pSupplier" class="form-control"></div>
         <div class="form-group"><label>تاریخ (شمسی)</label><input type="text" id="pDate" class="form-control" placeholder="1403-05-01" value="${todayJalali()}"></div>
@@ -1172,7 +1160,6 @@ $('addPurchaseBtn').onclick = () => {
                 <input type="text" id="pName" class="form-control" list="pList" placeholder="نام جنس">
                 <datalist id="pList">${options}</datalist>
             </div>
-            <div class="form-group"><label>دسته‌بندی</label><select id="pCategory" class="form-control">${cats.map(c => `<option>${c}</option>`).join('')}<option>سایر</option></select></div>
             <div style="display:flex;gap:10px">
                 <input type="number" id="pQty" class="form-control" placeholder="تعداد" value="1" min="1" style="width:80px">
                 <input type="number" id="pBuyPrice" class="form-control" placeholder="قیمت خرید واحد" value="0" style="width:120px">
@@ -1199,7 +1186,7 @@ function addPurchaseItem() {
         existing.qty += qty;
         if (sellPrice > 0) existing.sellPrice = sellPrice;
     } else {
-        purchaseItems.push({ productName, category: $('pCategory').value, qty, unitPrice, sellPrice, lineTotal: qty * unitPrice });
+        purchaseItems.push({ productName, qty, unitPrice, sellPrice, lineTotal: qty * unitPrice });
     }
     // Reset inputs for next item
     $('pName').value = '';
@@ -1243,7 +1230,7 @@ function savePurchase() {
     if (paid < 0 || paid > total) return alert('مبلغ پرداخت‌شده نامعتبر است');
 
     DB.addPurchase({
-        items: purchaseItems.map(i => ({ productName: i.productName, category: i.category, qty: i.qty, unitPrice: i.unitPrice, sellPrice: i.sellPrice, lineTotal: i.lineTotal })),
+        items: purchaseItems.map(i => ({ productName: i.productName, qty: i.qty, unitPrice: i.unitPrice, sellPrice: i.sellPrice, lineTotal: i.lineTotal })),
         total,
         paid,
         supplier: $('pSupplier').value,
@@ -1265,7 +1252,6 @@ function viewPurchase(id) {
     const itemsRows = items.map(i => `
         <tr>
             <td>${i.productName}</td>
-            <td><span class="badge badge-info">${i.category || '-'}</span></td>
             <td style="text-align:center">${i.qty}</td>
             <td style="text-align:left">${formatMoney(i.unitPrice)}</td>
             <td style="text-align:left">${formatMoney(i.sellPrice)}</td>
@@ -1291,7 +1277,6 @@ function viewPurchase(id) {
                 <thead>
                     <tr style="background:#059669;color:#fff">
                         <th>نام جنس</th>
-                        <th>دسته‌بندی</th>
                         <th style="text-align:center;width:70px">تعداد</th>
                         <th style="text-align:left;width:110px">قیمت خرید</th>
                         <th style="text-align:left;width:110px">قیمت فروش</th>
@@ -1405,7 +1390,6 @@ function renderAssets(list) {
         <tr>
             <td>#${a.id}</td>
             <td>${a.name}</td>
-            <td><span class="badge badge-info">${a.category}</span></td>
             <td>${a.qty}</td>
             <td>${formatMoney(a.unitPrice)}</td>
             <td>${formatMoney(a.total)}</td>
@@ -1417,7 +1401,7 @@ function renderAssets(list) {
                 <button class="btn btn-sm btn-danger" onclick="deleteAsset(${a.id})">🗑️</button>
             </td>
         </tr>
-    `).reverse().join('') || '<tr><td colspan="10" style="text-align:center">دارایی ثبت نشده</td></tr>';
+    `).reverse().join('') || '<tr><td colspan="9" style="text-align:center">دارایی ثبت نشده</td></tr>';
 }
 
 $('saveCapitalBtn').onclick = () => {
@@ -1432,14 +1416,6 @@ $('saveCapitalBtn').onclick = () => {
 $('addAssetBtn').onclick = () => {
     Modal.open('ثبت دارایی جدید (اموال دکان)', `
         <div class="form-group"><label>نام وسیله / دارایی</label><input type="text" id="aName" class="form-control" placeholder="مثلاً میز، چوکی، کامپیوتر..."></div>
-        <div class="form-group"><label>دسته‌بندی</label><select id="aCategory" class="form-control">
-            <option>مبلمان دکان</option>
-            <option>ابزار و تجهیزات کار</option>
-            <option>الکترونیک و کامپیوتر</option>
-            <option>ترین</option>
-            <option>دکوری و تبلیغاتی</option>
-            <option>سایر</option>
-        </select></div>
         <div class="form-group"><label>تعداد</label><input type="number" id="aQty" class="form-control" value="1" min="1"></div>
         <div class="form-group"><label>قیمت خرید واحد (افغانی)</label><input type="number" id="aUnitPrice" class="form-control" value="0"></div>
         <div class="form-group"><label>فروشنده / تأمین‌کننده</label><input type="text" id="aSupplier" class="form-control"></div>
@@ -1457,7 +1433,6 @@ function saveAsset() {
     if (qty <= 0 || unitPrice <= 0) return alert('تعداد و قیمت باید بیشتر از صفر باشد');
     DB.addAsset({
         name,
-        category: $('aCategory').value,
         qty,
         unitPrice,
         supplier: $('aSupplier').value,
@@ -1473,21 +1448,13 @@ function saveAsset() {
 
 $('searchAsset').oninput = e => {
     const term = e.target.value.toLowerCase();
-    renderAssets(DB.getAssets().filter(a => a.name.toLowerCase().includes(term) || (a.category || '').toLowerCase().includes(term) || (a.supplier || '').toLowerCase().includes(term)));
+    renderAssets(DB.getAssets().filter(a => a.name.toLowerCase().includes(term) || (a.supplier || '').toLowerCase().includes(term)));
 };
 
 function editAsset(id) {
     const a = DB.getAssets().find(x => x.id === id);
     Modal.open('ویرایش دارایی', `
         <div class="form-group"><label>نام وسیله</label><input type="text" id="aName" class="form-control" value="${a.name}"></div>
-        <div class="form-group"><label>دسته‌بندی</label><select id="aCategory" class="form-control">
-            <option ${a.category === 'مبلمان دکان' ? 'selected' : ''}>مبلمان دکان</option>
-            <option ${a.category === 'ابزار و تجهیزات کار' ? 'selected' : ''}>ابزار و تجهیزات کار</option>
-            <option ${a.category === 'الکترونیک و کامپیوتر' ? 'selected' : ''}>الکترونیک و کامپیوتر</option>
-            <option ${a.category === 'ترین' ? 'selected' : ''}>ترین</option>
-            <option ${a.category === 'دکوری و تبلیغاتی' ? 'selected' : ''}>دکوری و تبلیغاتی</option>
-            <option ${a.category === 'سایر' ? 'selected' : ''}>سایر</option>
-        </select></div>
         <div class="form-group"><label>تعداد</label><input type="number" id="aQty" class="form-control" value="${a.qty}"></div>
         <div class="form-group"><label>قیمت خرید واحد</label><input type="number" id="aUnitPrice" class="form-control" value="${a.unitPrice}"></div>
         <div class="form-group"><label>فروشنده</label><input type="text" id="aSupplier" class="form-control" value="${a.supplier || ''}"></div>
@@ -1504,7 +1471,6 @@ function editAsset(id) {
 function updateAsset(id) {
     DB.updateAsset(id, {
         name: $('aName').value.trim(),
-        category: $('aCategory').value,
         qty: Number($('aQty').value) || 1,
         unitPrice: Number($('aUnitPrice').value) || 0,
         supplier: $('aSupplier').value,
@@ -1771,19 +1737,6 @@ function renderProfitReport(content, summary) {
     const totalExpense = expenseItems.reduce((s, x) => s + (x.amount || 0), 0);
     const netProfit = totalIncome - totalExpense;
 
-    // Group by category
-    const incomeByCategory = {};
-    incomeItems.forEach(t => {
-        const cat = t.category || 'سایر';
-        incomeByCategory[cat] = (incomeByCategory[cat] || 0) + (t.amount || 0);
-    });
-
-    const expenseByCategory = {};
-    expenseItems.forEach(t => {
-        const cat = t.category || 'سایر';
-        expenseByCategory[cat] = (expenseByCategory[cat] || 0) + (t.amount || 0);
-    });
-
     const dateLabel = reportDateFrom || reportDateTo
         ? `از ${toPersianDate(reportDateFrom || '...')} تا ${toPersianDate(reportDateTo || '...')}`
         : 'همه تاریخ‌ها';
@@ -1798,17 +1751,13 @@ function renderProfitReport(content, summary) {
                     <div class="profit-section-header income">📥 درآمد (جمع: ${formatMoney(totalIncome)})</div>
                     <table class="report-table">
                         <thead>
-                            <tr><th>دسته‌بندی</th><th>مبلغ</th></tr>
+                            <tr><th>مبلغ</th></tr>
                         </thead>
                         <tbody>
-                            ${Object.entries(incomeByCategory).sort((a,b) => b[1] - a[1]).map(([cat, amt]) => `
-                                <tr><td>${cat}</td><td><strong>${formatMoney(amt)}</strong></td></tr>
-                            `).join('') || '<tr><td colspan="2" style="text-align:center;color:var(--secondary)">درآمدی ثبت نشده</td></tr>'}
+                            ${totalIncome ? `
+                                <tr><td><strong>${formatMoney(totalIncome)}</strong></td></tr>
+                            ` : '<tr><td style="text-align:center;color:var(--secondary)">درآمدی ثبت نشده</td></tr>'}
                         </tbody>
-                        ${Object.keys(incomeByCategory).length ? `
-                        <tfoot>
-                            <tr><td>جمع درآمد</td><td>${formatMoney(totalIncome)}</td></tr>
-                        </tfoot>` : ''}
                     </table>
                 </div>
 
@@ -1816,17 +1765,13 @@ function renderProfitReport(content, summary) {
                     <div class="profit-section-header expense">📤 هزینه (جمع: ${formatMoney(totalExpense)})</div>
                     <table class="report-table">
                         <thead>
-                            <tr><th>دسته‌بندی</th><th>مبلغ</th></tr>
+                            <tr><th>مبلغ</th></tr>
                         </thead>
                         <tbody>
-                            ${Object.entries(expenseByCategory).sort((a,b) => b[1] - a[1]).map(([cat, amt]) => `
-                                <tr><td>${cat}</td><td><strong>${formatMoney(amt)}</strong></td></tr>
-                            `).join('') || '<tr><td colspan="2" style="text-align:center;color:var(--secondary)">هزینه‌ای ثبت نشده</td></tr>'}
+                            ${totalExpense ? `
+                                <tr><td><strong>${formatMoney(totalExpense)}</strong></td></tr>
+                            ` : '<tr><td style="text-align:center;color:var(--secondary)">هزینه‌ای ثبت نشده</td></tr>'}
                         </tbody>
-                        ${Object.keys(expenseByCategory).length ? `
-                        <tfoot>
-                            <tr><td>جمع هزینه</td><td>${formatMoney(totalExpense)}</td></tr>
-                        </tfoot>` : ''}
                     </table>
                 </div>
 
@@ -1847,7 +1792,6 @@ function renderProfitReport(content, summary) {
                             <th>#</th>
                             <th>نوع</th>
                             <th>توضیحات</th>
-                            <th>دسته‌بندی</th>
                             <th>مبلغ</th>
                             <th>تاریخ</th>
                         </tr>
@@ -1858,11 +1802,10 @@ function renderProfitReport(content, summary) {
                                 <td>#${t.id}</td>
                                 <td><span class="badge badge-${t.type === 'income' ? 'success' : 'danger'}">${t.type === 'income' ? 'درآمد' : 'هزینه'}</span></td>
                                 <td>${t.description}</td>
-                                <td>${t.category || '-'}</td>
                                 <td>${formatMoney(t.amount)}</td>
                                 <td>${toPersianDate(t.date)}</td>
                             </tr>
-                        `).join('') : '<tr><td colspan="6" class="report-empty"><div class="empty-icon">📭</div>تراکنشی ثبت نشده</td></tr>'}
+                        `).join('') : '<tr><td colspan="5" class="report-empty"><div class="empty-icon">📭</div>تراکنشی ثبت نشده</td></tr>'}
                     </tbody>
                 </table>
             </div>
@@ -1906,7 +1849,6 @@ function renderInventoryReport(content, summary) {
                         <tr>
                             <th>#</th>
                             <th>نام محصول</th>
-                            <th>دسته‌بندی</th>
                             <th>قیمت خرید</th>
                             <th>قیمت فروش</th>
                             <th>موجودی</th>
@@ -1926,7 +1868,6 @@ function renderInventoryReport(content, summary) {
                                 <tr>
                                     <td>#${p.id}</td>
                                     <td>${p.name}</td>
-                                    <td><span class="badge badge-info">${p.category || '-'}</span></td>
                                     <td>${formatMoney(p.buyPrice)}</td>
                                     <td>${formatMoney(p.sellPrice)}</td>
                                     <td><span class="badge badge-${stockBadge}">${stock}</span></td>
@@ -1935,12 +1876,12 @@ function renderInventoryReport(content, summary) {
                                     <td><span class="badge badge-${profit >= 0 ? 'success' : 'danger'}">${formatMoney(profit)}</span></td>
                                 </tr>
                             `;
-                        }).join('') : '<tr><td colspan="9" class="report-empty"><div class="empty-icon">📭</div>محصولی ثبت نشده</td></tr>'}
+                        }).join('') : '<tr><td colspan="8" class="report-empty"><div class="empty-icon">📭</div>محصولی ثبت نشده</td></tr>'}
                     </tbody>
                     ${products.length ? `
                     <tfoot>
                         <tr>
-                            <td colspan="5">جمع کل</td>
+                            <td colspan="4">جمع کل</td>
                             <td>${totalItems.toLocaleString('fa-AF')}</td>
                             <td>${formatMoney(totalBuyValue)}</td>
                             <td>${formatMoney(totalSellValue)}</td>
@@ -2025,7 +1966,7 @@ function renderDebtorsReport(content, summary) {
                                     <td><small>${sources || '-'}</small></td>
                                 </tr>
                             `;
-                        }).join('') : '<tr><td colspan="6" class="report-empty"><div class="empty-icon">✅</div>طلبکاری ثبت نشده</td></tr>'}
+                        }).join('') : '<tr><td colspan="5" class="report-empty"><div class="empty-icon">✅</div>طلبکاری ثبت نشده</td></tr>'}
                     </tbody>
                     ${debtors.length ? `
                     <tfoot>
@@ -2346,10 +2287,10 @@ $('pinLockInput').addEventListener('keydown', e => {
 
 const SECTION_COLUMNS = {
     inventory: {
-        headers: ['شماره', 'نام محصول', 'دسته‌بندی', 'قیمت خرید', 'قیمت فروش', 'موجودی'],
-        keys: ['id', 'name', 'category', 'buyPrice', 'sellPrice', 'stock'],
+        headers: ['شماره', 'نام محصول', 'قیمت خرید', 'قیمت فروش', 'موجودی'],
+        keys: ['id', 'name', 'buyPrice', 'sellPrice', 'stock'],
         getData: () => DB.getProducts(),
-        addRow: (row) => DB.addProduct({ name: row['نام محصول'] || '', category: row['دسته‌بندی'] || 'سایر', buyPrice: Number(row['قیمت خرید']) || 0, sellPrice: Number(row['قیمت فروش']) || 0, stock: Number(row['موجودی']) || 0 }),
+        addRow: (row) => DB.addProduct({ name: row['نام محصول'] || '', buyPrice: Number(row['قیمت خرید']) || 0, sellPrice: Number(row['قیمت فروش']) || 0, stock: Number(row['موجودی']) || 0 }),
         reload: loadInventory
     },
     purchases: {
@@ -2402,17 +2343,17 @@ const SECTION_COLUMNS = {
         reload: loadDebtors
     },
     transactions: {
-        headers: ['شماره', 'تاریخ', 'نوع', 'شرح', 'مبلغ', 'دسته‌بندی'],
-        keys: ['id', 'date', 'type', 'description', 'amount', 'category'],
+        headers: ['شماره', 'تاریخ', 'نوع', 'شرح', 'مبلغ'],
+        keys: ['id', 'date', 'type', 'description', 'amount'],
         getData: () => DB.getTransactions(),
-        addRow: (row) => DB.addTransaction({ type: row['نوع'] || 'expense', description: row['شرح'] || '', amount: Number(row['مبلغ']) || 0, category: row['دسته‌بندی'] || 'سایر', date: row['تاریخ'] || todayJalali() }),
+        addRow: (row) => DB.addTransaction({ type: row['نوع'] || 'expense', description: row['شرح'] || '', amount: Number(row['مبلغ']) || 0, date: row['تاریخ'] || todayJalali() }),
         reload: () => { txPage = 1; loadFinance(); }
     },
     assets: {
-        headers: ['شماره', 'نام دارایی', 'دسته‌بندی', 'تعداد', 'قیمت واحد', 'مبلغ کل', 'تاریخ خرید', 'فروشنده', 'وضعیت', 'توضیحات'],
-        keys: ['id', 'name', 'category', 'qty', 'unitPrice', 'total', 'purchaseDate', 'supplier', 'status', 'notes'],
+        headers: ['شماره', 'نام دارایی', 'تعداد', 'قیمت واحد', 'مبلغ کل', 'تاریخ خرید', 'فروشنده', 'وضعیت', 'توضیحات'],
+        keys: ['id', 'name', 'qty', 'unitPrice', 'total', 'purchaseDate', 'supplier', 'status', 'notes'],
         getData: () => DB.getAssets(),
-        addRow: (row) => DB.addAsset({ name: row['نام دارایی'] || '', category: row['دسته‌بندی'] || 'سایر', qty: Number(row['تعداد']) || 1, unitPrice: Number(row['قیمت واحد']) || 0, purchaseDate: row['تاریخ خرید'] || todayJalali(), supplier: row['فروشنده'] || '', status: row['وضعیت'] || 'فعال', notes: row['توضیحات'] || '' }),
+        addRow: (row) => DB.addAsset({ name: row['نام دارایی'] || '', qty: Number(row['تعداد']) || 1, unitPrice: Number(row['قیمت واحد']) || 0, purchaseDate: row['تاریخ خرید'] || todayJalali(), supplier: row['فروشنده'] || '', status: row['وضعیت'] || 'فعال', notes: row['توضیحات'] || '' }),
         reload: () => { loadAssets(); loadFinance(); }
     }
 };
