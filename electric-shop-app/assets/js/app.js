@@ -2313,16 +2313,70 @@ const SECTION_COLUMNS = {
         reload: loadInventory
     },
     purchases: {
-        headers: ['شماره', 'شماره فاکتور', 'تاریخ', 'فروشنده', 'مبلغ کل', 'پرداخت‌شده', 'باقی‌مانده', 'اقلام'],
-        keys: ['id', 'invoiceNo', 'date', 'supplier', 'total', 'paid', 'remaining', '_itemsText'],
-        getData: () => DB.getPurchases().map(p => ({ ...p, _itemsText: (p.items || []).map(i => `${i.productName}×${i.qty}@${i.unitPrice}`).join(' | ') })),
+        // یک ردیف برای هر جنس تا تعداد و قیمت فی در ستون جداگانه بیاید
+        headers: ['شماره خرید', 'شماره فاکتور', 'تاریخ', 'فروشنده', 'نام جنس', 'تعداد', 'قیمت خرید فی', 'قیمت فروش فی', 'مبلغ قلم', 'مبلغ کل فاکتور', 'پرداخت‌شده', 'باقی‌مانده', 'توضیحات'],
+        keys: null,
+        getRows: () => {
+            const rows = [];
+            DB.getPurchases().forEach(p => {
+                const items = (p.items && p.items.length) ? p.items : [{ productName: p.productName || '', qty: Number(p.qty) || 0, unitPrice: Number(p.unitPrice) || 0, sellPrice: Number(p.sellPrice) || 0, lineTotal: (Number(p.qty) || 0) * (Number(p.unitPrice) || 0) }];
+                items.forEach((i, idx) => {
+                    const first = idx === 0;
+                    rows.push({
+                        'شماره خرید': p.id,
+                        'شماره فاکتور': p.invoiceNo || '',
+                        'تاریخ': p.date || '',
+                        'فروشنده': p.supplier || '',
+                        'نام جنس': i.productName || '',
+                        'تعداد': Number(i.qty) || 0,
+                        'قیمت خرید فی': Number(i.unitPrice) || 0,
+                        'قیمت فروش فی': Number(i.sellPrice) || 0,
+                        'مبلغ قلم': Number(i.lineTotal) || ((Number(i.qty) || 0) * (Number(i.unitPrice) || 0)),
+                        'مبلغ کل فاکتور': first ? (Number(p.total) || 0) : '',
+                        'پرداخت‌شده': first ? (Number(p.paid) || 0) : '',
+                        'باقی‌مانده': first ? (Number(p.remaining) || 0) : '',
+                        'توضیحات': first ? (p.notes || '') : ''
+                    });
+                });
+            });
+            return rows;
+        },
+        getData: () => DB.getPurchases(),
         addRow: null, // Purchases have nested items — import not supported via simple Excel
         reload: () => { loadPurchases(); loadInventory(); loadFinance(); }
     },
     sales: {
-        headers: ['شماره', 'تاریخ', 'مشتری', 'شماره تماس', 'مبلغ کل', 'تخفیف', 'مبلغ پرداخت', 'پرداخت‌شده', 'بدهی', 'آیتم‌ها'],
-        keys: ['id', 'date', 'customer', 'phone', 'subtotal', 'discount', 'total', 'paid', 'debt', '_itemsText'],
-        getData: () => DB.getSales().map(s => ({ ...s, _itemsText: (s.items || []).map(i => `${i.name}×${i.qty}@${i.price}`).join(' | ') })),
+        // یک ردیف برای هر کالای فروشته‌شده
+        headers: ['شماره فاکتور', 'تاریخ', 'مشتری', 'شماره تماس', 'نام جنس', 'تعداد', 'قیمت فی', 'مبلغ قلم', 'جمع اقلام', 'تخفیف', 'مبلغ نهایی', 'پرداخت‌شده', 'بدهی'],
+        keys: null,
+        getRows: () => {
+            const rows = [];
+            DB.getSales().forEach(s => {
+                const items = (s.items && s.items.length) ? s.items : [{ name: '', qty: 0, price: 0 }];
+                items.forEach((i, idx) => {
+                    const first = idx === 0;
+                    const qty = Number(i.qty) || 0;
+                    const price = Number(i.price) || 0;
+                    rows.push({
+                        'شماره فاکتور': s.id,
+                        'تاریخ': s.date || '',
+                        'مشتری': s.customer || '',
+                        'شماره تماس': s.phone || '',
+                        'نام جنس': i.name || '',
+                        'تعداد': qty,
+                        'قیمت فی': price,
+                        'مبلغ قلم': qty * price,
+                        'جمع اقلام': first ? (Number(s.subtotal) || 0) : '',
+                        'تخفیف': first ? (Number(s.discount) || 0) : '',
+                        'مبلغ نهایی': first ? (Number(s.total) || 0) : '',
+                        'پرداخت‌شده': first ? (Number(s.paid) || 0) : '',
+                        'بدهی': first ? (Number(s.debt) || 0) : ''
+                    });
+                });
+            });
+            return rows;
+        },
+        getData: () => DB.getSales(),
         addRow: null, // Sales have nested items — import not supported via simple Excel
         reload: loadSales
     },
@@ -2383,8 +2437,8 @@ function exportSectionExcel(section) {
     const data = cfg.getData();
     if (!data || data.length === 0) return alert('داده‌ای برای خروجی وجود ندارد');
 
-    // Build rows using Persian headers
-    const rows = data.map(item => {
+    // Sections with nested items build their own flattened rows (one row per item)
+    const rows = cfg.getRows ? cfg.getRows() : data.map(item => {
         const row = {};
         cfg.headers.forEach((h, i) => {
             const key = cfg.keys[i];
@@ -2398,7 +2452,10 @@ function exportSectionExcel(section) {
         return row;
     });
 
+    if (!rows || rows.length === 0) return alert('داده‌ای برای خروجی وجود ندارد');
+
     const ws = XLSX.utils.json_to_sheet(rows, { header: cfg.headers });
+    ws['!cols'] = cfg.headers.map(h => ({ wch: Math.max(10, h.length + 4) }));
     const wb = XLSX.utils.book_new();
     XLSX.utils.book_append_sheet(wb, ws, section);
     const fileName = `fanous_${section}_${todayJalali().replace(/-/g, '')}.xlsx`;
