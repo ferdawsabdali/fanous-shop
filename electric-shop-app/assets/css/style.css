@@ -380,6 +380,42 @@ body {
 .mb-2 { margin-bottom: 10px; }
 
 /* Forms */
+.form-row {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 12px;
+}
+
+.form-row .form-group {
+    margin-bottom: 15px;
+}
+
+@media (max-width: 640px) {
+    .form-row { grid-template-columns: 1fr; gap: 0; }
+}
+
+/* ردیف افزودن جنس: تعداد / قیمت خرید / قیمت فروش / دکمه */
+.item-add-row {
+    display: grid;
+    grid-template-columns: 0.8fr 1fr 1fr auto;
+    gap: 10px;
+    align-items: end;
+}
+
+.item-add-row .form-group {
+    margin-bottom: 0;
+}
+
+.item-add-row .btn {
+    height: 42px;
+    white-space: nowrap;
+}
+
+@media (max-width: 640px) {
+    .item-add-row { grid-template-columns: 1fr 1fr; }
+    .item-add-row .btn { grid-column: 1 / -1; }
+}
+
 .form-group {
     margin-bottom: 15px;
 }
@@ -534,6 +570,21 @@ textarea.form-control {
     margin-top: 10px;
     padding-top: 10px;
     border-top: 2px solid var(--border);
+}
+
+.totals-row {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 12px;
+    align-items: center;
+}
+
+.totals-row .invoice-total {
+    text-align: center;
+}
+
+@media (max-width: 640px) {
+    .totals-row { grid-template-columns: 1fr; gap: 0; }
 }
 
 /* Progress Bar */

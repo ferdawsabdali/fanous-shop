@@ -96,6 +96,7 @@ const DB = {
         const data = this.getAll();
         purchase.id = this.getNextId('purchase', data);
         purchase.date = purchase.date || todayJalali();
+        purchase.invoiceNo = (purchase.invoiceNo || '').toString().trim();
 
         // Support both old single-item and new multi-item formats
         if (purchase.items && purchase.items.length > 0) {
@@ -133,6 +134,9 @@ const DB = {
                 if (item.unitPrice > 0) product.buyPrice = item.unitPrice;
                 item.productId = product.id;
             } else {
+                const maxId = data.products.reduce((m, p) => Math.max(m, Number(p.id) || 0), 0);
+                if (!data.nextIds) data.nextIds = {};
+                if (!(data.nextIds.product > maxId)) data.nextIds.product = maxId + 1;
                 const newProduct = {
                     id: this.getNextId('product', data),
                     name: item.productName,
@@ -244,6 +248,10 @@ const DB = {
     getProducts() { return this.getAll().products; },
     addProduct(product) {
         const data = this.getAll();
+        // Never reuse a retired code: keep the counter above the highest existing code
+        const maxId = data.products.reduce((m, p) => Math.max(m, Number(p.id) || 0), 0);
+        if (!data.nextIds) data.nextIds = {};
+        if (!(data.nextIds.product > maxId)) data.nextIds.product = maxId + 1;
         product.id = this.getNextId('product', data);
         data.products.push(product);
         this.save(data);
@@ -260,6 +268,41 @@ const DB = {
     deleteProduct(id) {
         const data = this.getAll();
         data.products = data.products.filter(p => p.id !== id);
+        // NOTE: product codes are intentionally NOT renumbered on delete.
+        // A deleted code stays permanently retired so old invoices/reports keep matching.
+        this.save(data);
+    },
+
+    /* Re-number product codes to 1..N (used only for the one-time alignment).
+       Also remaps productId references inside sales and purchases. */
+    _renumberProducts(data) {
+        const map = {};
+        data.products.forEach((p, i) => {
+            const newId = i + 1;
+            if (p.id !== newId) map[p.id] = newId;
+            p.id = newId;
+        });
+        const remap = list => {
+            (list || []).forEach(rec => {
+                (rec.items || []).forEach(item => {
+                    if (item.productId && map[item.productId]) item.productId = map[item.productId];
+                });
+            });
+        };
+        remap(data.sales);
+        remap(data.purchases);
+        if (!data.nextIds) data.nextIds = {};
+        data.nextIds.product = data.products.length + 1;
+        return data;
+    },
+
+    /* One-time only: align existing product codes to start at 1.
+       Runs once ever; afterwards codes are permanent and gaps are kept. */
+    normalizeProductIds() {
+        const data = this.getAll();
+        if (data.productIdsNormalized) return;
+        this._renumberProducts(data);
+        data.productIdsNormalized = true;
         this.save(data);
     },
     getProduct(id) {
@@ -761,5 +804,6 @@ const DB = {
 };
 
 DB.init();
+DB.normalizeProductIds();
 // 🔔 Notify CloudSync that DB is ready
 window.dispatchEvent(new Event('db-ready'));

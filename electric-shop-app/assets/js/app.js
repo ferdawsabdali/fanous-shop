@@ -281,8 +281,10 @@ $('newSaleBtn').onclick = () => {
     saleItems = [];
     const products = DB.getProducts().filter(p => p.stock > 0);
     Modal.open('فاکتور فروش جدید', `
-        <div class="form-group"><label>نام مشتری</label><input type="text" id="sCustomer" class="form-control"></div>
-        <div class="form-group"><label>شماره تماس</label><input type="text" id="sPhone" class="form-control"></div>
+        <div class="form-row">
+            <div class="form-group"><label>نام مشتری</label><input type="text" id="sCustomer" class="form-control"></div>
+            <div class="form-group"><label>شماره تماس</label><input type="text" id="sPhone" class="form-control"></div>
+        </div>
         <div class="form-group"><label>تاریخ (شمسی)</label><input type="text" id="sDate" class="form-control" placeholder="1403-05-01" value="${todayJalali()}"></div>
         <div class="invoice-items">
             <div class="form-group"><label>افزودن کالا</label>
@@ -297,10 +299,14 @@ $('newSaleBtn').onclick = () => {
             </div>
             <div id="saleItemsList" style="margin-top:15px"></div>
         </div>
-        <div class="form-group"><label>تخفیف (افغانی)</label><input type="number" id="sDiscount" class="form-control" value="0" oninput="calcSaleTotal()"></div>
-        <div class="form-group"><label>مبلغ پرداخت‌شده (افغانی)</label><input type="number" id="sPaid" class="form-control" value="0" oninput="calcSaleTotal()"></div>
-        <div class="invoice-total">قابل پرداخت: <span id="sTotal">0</span> افغانی</div>
-        <div class="invoice-total" style="color:#dc2626">باقی‌مانده: <span id="sDebt">0</span> افغانی</div>
+        <div class="form-row">
+            <div class="form-group"><label>تخفیف (افغانی)</label><input type="number" id="sDiscount" class="form-control" value="0" oninput="calcSaleTotal()"></div>
+            <div class="form-group"><label>مبلغ پرداخت‌شده (افغانی)</label><input type="number" id="sPaid" class="form-control" value="0" oninput="calcSaleTotal()"></div>
+        </div>
+        <div class="totals-row">
+            <div class="invoice-total">قابل پرداخت: <span id="sTotal">0</span> افغانی</div>
+            <div class="invoice-total" style="color:#dc2626">باقی‌مانده: <span id="sDebt">0</span> افغانی</div>
+        </div>
     `, '<button class="btn btn-primary" onclick="saveSale()">ثبت فاکتور</button>');
 };
 
@@ -1132,6 +1138,7 @@ function renderPurchases(list) {
         return `
         <tr>
             <td>#${p.id}</td>
+            <td>${p.invoiceNo ? `<strong>${p.invoiceNo}</strong>` : '-'}</td>
             <td>${itemLabel}</td>
             <td>${p.supplier || '-'}</td>
             <td>${toPersianDate(p.date)}</td>
@@ -1144,7 +1151,7 @@ function renderPurchases(list) {
                 <button class="btn btn-sm btn-danger" onclick="deletePurchase(${p.id})">🗑️</button>
             </td>
         </tr>`;
-    }).reverse().join('') || '<tr><td colspan="8" style="text-align:center">خریداری ثبت نشده</td></tr>';
+    }).reverse().join('') || '<tr><td colspan="9" style="text-align:center">خریداری ثبت نشده</td></tr>';
 }
 
 $('addPurchaseBtn').onclick = () => {
@@ -1152,25 +1159,32 @@ $('addPurchaseBtn').onclick = () => {
     const products = DB.getProducts();
     const options = products.map(p => `<option value="${p.name}">${p.name}</option>`).join('');
     Modal.open('خریداری جدید از بازار', `
-        <div class="form-group"><label>فروشنده / تأمین‌کننده</label><input type="text" id="pSupplier" class="form-control"></div>
-        <div class="form-group"><label>تاریخ (شمسی)</label><input type="text" id="pDate" class="form-control" placeholder="1403-05-01" value="${todayJalali()}"></div>
-        <div class="form-group"><label>توضیحات</label><input type="text" id="pNotes" class="form-control"></div>
+        <div class="form-row">
+            <div class="form-group"><label>شماره فاکتور (فاکتور فروشنده)</label><input type="text" id="pInvoiceNo" class="form-control" placeholder="مثلاً 1024"></div>
+            <div class="form-group"><label>فروشنده / تأمین‌کننده</label><input type="text" id="pSupplier" class="form-control"></div>
+        </div>
+        <div class="form-row">
+            <div class="form-group"><label>تاریخ (شمسی)</label><input type="text" id="pDate" class="form-control" placeholder="1403-05-01" value="${todayJalali()}"></div>
+            <div class="form-group"><label>توضیحات</label><input type="text" id="pNotes" class="form-control"></div>
+        </div>
         <div class="invoice-items">
             <div class="form-group"><label>افزودن جنس</label>
                 <input type="text" id="pName" class="form-control" list="pList" placeholder="نام جنس">
                 <datalist id="pList">${options}</datalist>
             </div>
-            <div style="display:flex;gap:10px">
-                <input type="number" id="pQty" class="form-control" placeholder="تعداد" value="1" min="1" style="width:80px">
-                <input type="number" id="pBuyPrice" class="form-control" placeholder="قیمت خرید واحد" value="0" style="width:120px">
-                <input type="number" id="pSellPrice" class="form-control" placeholder="قیمت فروش واحد" value="0" style="width:120px">
+            <div class="item-add-row">
+                <div class="form-group"><label>تعداد</label><input type="number" id="pQty" class="form-control" value="1" min="1"></div>
+                <div class="form-group"><label>قیمت خرید واحد</label><input type="number" id="pBuyPrice" class="form-control" value="0"></div>
+                <div class="form-group"><label>قیمت فروش واحد</label><input type="number" id="pSellPrice" class="form-control" value="0"></div>
                 <button class="btn btn-success" onclick="addPurchaseItem()">+ اضافه</button>
             </div>
             <div id="purchaseItemsList" style="margin-top:15px"></div>
         </div>
         <div class="form-group"><label>پرداخت‌شده (افغانی)</label><input type="number" id="pPaid" class="form-control" value="0" oninput="calcPurchaseTotal()"></div>
-        <div class="invoice-total">مبلغ کل: <span id="pTotal">0</span> افغانی</div>
-        <div class="invoice-total" style="color:#dc2626">باقی‌مانده (قروض): <span id="pRemaining">0</span> افغانی</div>
+        <div class="totals-row">
+            <div class="invoice-total">مبلغ کل: <span id="pTotal">0</span> افغانی</div>
+            <div class="invoice-total" style="color:#dc2626">باقی‌مانده (قروض): <span id="pRemaining">0</span> افغانی</div>
+        </div>
     `, '<button class="btn btn-primary" onclick="savePurchase()">ثبت خریداری</button>');
 };
 
@@ -1233,6 +1247,7 @@ function savePurchase() {
         items: purchaseItems.map(i => ({ productName: i.productName, qty: i.qty, unitPrice: i.unitPrice, sellPrice: i.sellPrice, lineTotal: i.lineTotal })),
         total,
         paid,
+        invoiceNo: $('pInvoiceNo').value.trim(),
         supplier: $('pSupplier').value,
         date: $('pDate').value,
         notes: $('pNotes').value
@@ -1266,7 +1281,8 @@ function viewPurchase(id) {
                 <p style="margin:0.25rem 0 0;font-size:13px;color:#64748b">فاکتور خریداری کالا</p>
             </div>
             <div class="invoice-meta" style="display:flex;justify-content:space-between;flex-wrap:wrap;gap:1rem;font-size:13px;margin-bottom:1rem;">
-                <div><strong>شماره فاکتور:</strong> #${p.id}</div>
+                <div><strong>شماره فاکتور:</strong> ${p.invoiceNo ? p.invoiceNo : '#' + p.id}</div>
+                <div><strong>شماره ثبت:</strong> #${p.id}</div>
                 <div><strong>تاریخ:</strong> ${toPersianDate(p.date)}</div>
             </div>
             <div class="invoice-supplier" style="background:#f0fdf4;border:1px solid #bbf7d0;border-radius:8px;padding:0.75rem 1rem;margin-bottom:1rem;font-size:13px;">
@@ -1306,7 +1322,8 @@ $('searchPurchase').oninput = e => {
         const items = p.items || [];
         const namesMatch = items.some(i => i.productName.toLowerCase().includes(term));
         const supplierMatch = (p.supplier || '').toLowerCase().includes(term);
-        return namesMatch || supplierMatch;
+        const invoiceMatch = String(p.invoiceNo || '').toLowerCase().includes(term);
+        return namesMatch || supplierMatch || invoiceMatch;
     }));
 };
 
@@ -1667,6 +1684,7 @@ function renderPurchasesReport(content, summary) {
                     <thead>
                         <tr>
                             <th>#</th>
+                            <th>شماره فاکتور</th>
                             <th>اقلام</th>
                             <th>تأمین‌کننده</th>
                             <th>تاریخ</th>
@@ -1684,6 +1702,7 @@ function renderPurchasesReport(content, summary) {
                             return `
                             <tr>
                                 <td>#${p.id}</td>
+                                <td>${p.invoiceNo ? `<strong>${p.invoiceNo}</strong>` : '-'}</td>
                                 <td>${itemLabel}</td>
                                 <td>${p.supplier || '-'}</td>
                                 <td>${toPersianDate(p.date)}</td>
@@ -1691,12 +1710,12 @@ function renderPurchasesReport(content, summary) {
                                 <td>${formatMoney(p.paid)}</td>
                                 <td><span class="badge badge-${p.remaining > 0 ? 'danger' : 'success'}">${formatMoney(p.remaining)}</span></td>
                             </tr>`;
-                        }).join('') : '<tr><td colspan="7" class="report-empty"><div class="empty-icon">📭</div>خریداری در این بازه ثبت نشده</td></tr>'}
+                        }).join('') : '<tr><td colspan="8" class="report-empty"><div class="empty-icon">📭</div>خریداری در این بازه ثبت نشده</td></tr>'}
                     </tbody>
                     ${purchases.length ? `
                     <tfoot>
                         <tr>
-                            <td colspan="4">جمع کل (${count} فاکتور)</td>
+                            <td colspan="5">جمع کل (${count} فاکتور)</td>
                             <td>${formatMoney(totalPurchases)}</td>
                             <td>${formatMoney(totalPaid)}</td>
                             <td>${formatMoney(totalRemaining)}</td>
@@ -2294,8 +2313,8 @@ const SECTION_COLUMNS = {
         reload: loadInventory
     },
     purchases: {
-        headers: ['شماره', 'تاریخ', 'فروشنده', 'مبلغ کل', 'پرداخت‌شده', 'باقی‌مانده', 'اقلام'],
-        keys: ['id', 'date', 'supplier', 'total', 'paid', 'remaining', '_itemsText'],
+        headers: ['شماره', 'شماره فاکتور', 'تاریخ', 'فروشنده', 'مبلغ کل', 'پرداخت‌شده', 'باقی‌مانده', 'اقلام'],
+        keys: ['id', 'invoiceNo', 'date', 'supplier', 'total', 'paid', 'remaining', '_itemsText'],
         getData: () => DB.getPurchases().map(p => ({ ...p, _itemsText: (p.items || []).map(i => `${i.productName}×${i.qty}@${i.unitPrice}`).join(' | ') })),
         addRow: null, // Purchases have nested items — import not supported via simple Excel
         reload: () => { loadPurchases(); loadInventory(); loadFinance(); }
