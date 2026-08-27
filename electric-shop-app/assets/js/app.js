@@ -2304,6 +2304,67 @@ $('pinLockInput').addEventListener('keydown', e => {
 
 // ==================== EXCEL IMPORT / EXPORT ====================
 
+// --- Excel import helpers ---------------------------------------------------
+// Users may type Persian/Arabic digits, thousand separators, or slightly
+// different header spellings (with/without ZWNJ). Normalize everything.
+function xlNum(v) {
+    if (v === undefined || v === null || v === '') return 0;
+    if (typeof v === 'number') return isFinite(v) ? v : 0;
+    let s = String(v)
+        .replace(/[\u06F0-\u06F9]/g, d => String(d.charCodeAt(0) - 0x06F0))   // ۰-۹
+        .replace(/[\u0660-\u0669]/g, d => String(d.charCodeAt(0) - 0x0660))   // ٠-٩
+        .replace(/[,\u066C\s]/g, '')                                          // separators
+        .replace(/\u066B/g, '.');                                             // decimal mark
+    const n = parseFloat(s);
+    return isFinite(n) ? n : 0;
+}
+
+function xlKey(k) {
+    return String(k == null ? '' : k)
+        .replace(/[\u200c\u200f\u200e]/g, '')  // ZWNJ / RTL marks
+        .replace(/\s+/g, '')
+        .replace(/\u064a/g, '\u06cc')          // Arabic yeh → Persian yeh
+        .replace(/\u0643/g, '\u06a9')          // Arabic kaf → Persian kaf
+        .trim();
+}
+
+// Build a normalized-key view of a sheet row once, then read fields by alias.
+function xlRow(raw) {
+    const map = {};
+    Object.keys(raw || {}).forEach(k => { map[xlKey(k)] = raw[k]; });
+    return map;
+}
+
+function xlPick(row, aliases) {
+    for (const a of aliases) {
+        const v = row[xlKey(a)];
+        if (v !== undefined && v !== null && String(v).trim() !== '') return v;
+    }
+    return '';
+}
+
+function xlText(row, aliases) { return String(xlPick(row, aliases)).trim(); }
+function xlNumber(row, aliases) { return xlNum(xlPick(row, aliases)); }
+
+// Group flattened rows (one row per item) back into invoices.
+// Rows that repeat the same invoice number belong together; a blank invoice
+// number means "same invoice as the row above".
+function xlGroupInvoices(rows, idAliases) {
+    const groups = [];
+    let current = null;
+    rows.forEach(raw => {
+        const row = xlRow(raw);
+        const id = xlText(row, idAliases);
+        if (!current || (id && id !== current.id)) {
+            current = { id: id || (current ? current.id : '_1'), head: row, rows: [] };
+            groups.push(current);
+        }
+        current.rows.push(row);
+    });
+    return groups;
+}
+
+
 const SECTION_COLUMNS = {
     inventory: {
         headers: ['شماره', 'نام محصول', 'قیمت خرید', 'قیمت فروش', 'موجودی'],
@@ -2342,7 +2403,36 @@ const SECTION_COLUMNS = {
             return rows;
         },
         getData: () => DB.getPurchases(),
-        addRow: null, // Purchases have nested items — import not supported via simple Excel
+        // Import: rows of the same «شماره خرید» (or «شماره فاکتور») are merged back
+        // into one purchase with its item list. Totals/paid appear only on the
+        // first row of each invoice, so they are read from that row.
+        addRows: (rows) => {
+            const groups = xlGroupInvoices(rows, ['شماره خرید', 'شماره فاکتور']);
+            let count = 0;
+            groups.forEach(g => {
+                const items = g.rows.map(r => {
+                    const unitPrice = xlNumber(r, ['قیمت خرید فی', 'قیمت خرید', 'قیمت فی']);
+                    return {
+                        productName: xlText(r, ['نام جنس', 'نام محصول', 'جنس']),
+                        qty: xlNumber(r, ['تعداد', 'مقدار']),
+                        unitPrice: unitPrice,
+                        sellPrice: xlNumber(r, ['قیمت فروش فی', 'قیمت فروش']) || unitPrice
+                    };
+                }).filter(i => i.productName && i.qty > 0);
+                if (!items.length) return;
+                const h = g.head;
+                DB.addPurchase({
+                    invoiceNo: xlText(h, ['شماره فاکتور']),
+                    date: xlText(h, ['تاریخ']) || todayJalali(),
+                    supplier: xlText(h, ['فروشنده', 'تحویل‌دهنده']),
+                    items: items,
+                    paid: xlNumber(h, ['پرداخت‌شده', 'پرداخت شده', 'پرداختی']),
+                    notes: xlText(h, ['توضیحات', 'یادداشت'])
+                });
+                count++;
+            });
+            return count;
+        },
         reload: () => { loadPurchases(); loadInventory(); loadFinance(); }
     },
     sales: {
@@ -2377,8 +2467,55 @@ const SECTION_COLUMNS = {
             return rows;
         },
         getData: () => DB.getSales(),
-        addRow: null, // Sales have nested items — import not supported via simple Excel
-        reload: loadSales
+        // Import: rows sharing «شماره فاکتور» become one sale. Products are matched
+        // by name; a missing product is created so stock stays consistent.
+        addRows: (rows) => {
+            const groups = xlGroupInvoices(rows, ['شماره فاکتور', 'شماره']);
+            let count = 0;
+            groups.forEach(g => {
+                const items = [];
+                g.rows.forEach(r => {
+                    const name = xlText(r, ['نام جنس', 'نام محصول', 'جنس']);
+                    const qty = xlNumber(r, ['تعداد', 'مقدار']);
+                    const price = xlNumber(r, ['قیمت فی', 'قیمت فروش فی', 'قیمت فروش', 'قیمت']);
+                    if (!name || qty <= 0) return;
+                    let product = DB.getProducts().find(p => String(p.name).trim() === name);
+                    if (!product) {
+                        product = DB.addProduct({ name: name, buyPrice: price, sellPrice: price, stock: qty });
+                    }
+                    items.push({ productId: product.id, name: name, qty: qty, price: price });
+                });
+                if (!items.length) return;
+                const h = g.head;
+                const subtotal = xlNumber(h, ['جمع اقلام', 'جمع']) || items.reduce((s, i) => s + i.qty * i.price, 0);
+                const discount = xlNumber(h, ['تخفیف']);
+                let total = xlNumber(h, ['مبلغ نهایی', 'مبلغ کل', 'قابل پرداخت']);
+                if (!total) total = subtotal - discount;
+                if (total < 0) total = 0;
+                let paid = xlNumber(h, ['پرداخت‌شده', 'پرداخت شده', 'پرداختی']);
+                let debt = xlNumber(h, ['بدهی', 'باقی‌مانده', 'باقی مانده']);
+                // If only one of paid/debt is given, derive the other from the total
+                if (!paid && debt) paid = total - debt;
+                if (!paid && !debt) paid = total;
+                if (paid < 0) paid = 0;
+                debt = total - paid;
+                if (debt < 0) debt = 0;
+                DB.addSale({
+                    date: xlText(h, ['تاریخ']) || todayJalali(),
+                    customer: xlText(h, ['مشتری', 'نام مشتری']) || 'مشتری نقدی',
+                    phone: xlText(h, ['شماره تماس', 'تلفن']),
+                    items: items,
+                    subtotal: subtotal,
+                    discount: discount,
+                    total: total,
+                    paid: paid,
+                    debt: debt
+                });
+                count++;
+            });
+            return count;
+        },
+        reload: () => { loadSales(); loadInventory(); loadFinance(); }
     },
     repairs: {
         headers: ['شماره', 'تاریخ دریافت', 'مشتری', 'دستگاه', 'مشکل', 'وضعیت', 'هزینه', 'پرداخت‌شده', 'باقی‌مانده', 'شماره تماس'],
@@ -2466,7 +2603,7 @@ function exportSectionExcel(section) {
 function importSectionExcel(section, fileInput) {
     const cfg = SECTION_COLUMNS[section];
     if (!cfg) return alert('بخش نامعتبر است');
-    if (!cfg.addRow) return alert('ورودی اکسل برای این بخش پشتیبانی نمی‌شود (فقط خروجی ممکن است)');
+    if (!cfg.addRow && !cfg.addRows) return alert('ورودی اکسل برای این بخش پشتیبانی نمی‌شود (فقط خروجی ممکن است)');
 
     const file = fileInput.files[0];
     if (!file) return;
@@ -2477,27 +2614,45 @@ function importSectionExcel(section, fileInput) {
             const data = new Uint8Array(e.target.result);
             const wb = XLSX.read(data, { type: 'array' });
             const ws = wb.Sheets[wb.SheetNames[0]];
-            const json = XLSX.utils.sheet_to_json(ws);
+            // defval keeps blank cells present so grouped rows keep their shape
+            const json = XLSX.utils.sheet_to_json(ws, { defval: '' });
 
             if (json.length === 0) return alert('فایل اکسل خالی است');
 
-            let imported = 0, errors = 0;
-            json.forEach((row, idx) => {
+            let imported = 0, errors = 0, unit = 'ردیف';
+
+            if (cfg.addRows) {
+                // Sections with item lists (خریداری / فروش): several sheet rows
+                // form one invoice, so the whole sheet is handed over at once.
+                unit = 'فاکتور';
                 try {
-                    cfg.addRow(row);
-                    imported++;
+                    imported = cfg.addRows(json) || 0;
                 } catch(err) {
-                    console.error(`Row ${idx + 2} error:`, err);
+                    console.error('Grouped import error:', err);
                     errors++;
                 }
-            });
+                if (!imported && !errors) {
+                    return alert('هیچ ردیف معتبری پیدا نشد. ستون‌های «نام جنس» و «تعداد» را بررسی کنید.');
+                }
+            } else {
+                json.forEach((row, idx) => {
+                    try {
+                        cfg.addRow(row);
+                        imported++;
+                    } catch(err) {
+                        console.error(`Row ${idx + 2} error:`, err);
+                        errors++;
+                    }
+                });
+            }
 
             if (cfg.reload) cfg.reload();
             loadDashboard();
 
-            let msg = `✅ ${imported} ردیف وارد شد`;
-            if (errors > 0) msg += ` | ⚠️ ${errors} ردیف خطا`;
+            let msg = `✅ ${imported} ${unit} وارد شد`;
+            if (errors > 0) msg += ` | ⚠️ ${errors} خطا`;
             CloudSync._showSyncNotification(msg);
+            alert(msg);
         } catch(err) {
             console.error('Excel import error:', err);
             alert('خطا در خواندن فایل اکسل: ' + err.message);
