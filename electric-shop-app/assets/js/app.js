@@ -2,6 +2,65 @@
 const $ = id => document.getElementById(id);
 const formatMoney = n => Number(n || 0).toLocaleString('fa-AF') + ' ؋';
 const toPersianDate = str => str ? str.replace(/-/g, '/') : '';
+// Quantities may be fractional (متر / کیلو), so keep up to 3 decimals
+const formatQty = n => Number(n || 0).toLocaleString('fa-AF', { maximumFractionDigits: 3 });
+const escAttr = s => String(s == null ? '' : s).replace(/&/g, '&amp;').replace(/"/g, '&quot;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
+
+// ==================== UNITS (واحد اندازه‌گیری) ====================
+// Every product / purchase item / sale item carries a unit so quantities are
+// counted the way the shop really measures them (wire in متر, bulbs in دانه ...).
+const UNITS = ['دانه', 'متر', 'قطعه', 'کیلو', 'بسته'];
+const DEFAULT_UNIT = 'دانه';
+const OTHER_UNIT = 'سایر';
+
+function normalizeUnit(u) {
+    const v = String(u == null ? '' : u).trim();
+    if (!v || v === OTHER_UNIT) return DEFAULT_UNIT;
+    if (v === 'عدد') return DEFAULT_UNIT; // legacy data
+    return v;
+}
+
+// Unit picker: common units + a free-text box that shows only when «سایر» is picked
+function unitSelectHtml(id, selected) {
+    const cur = normalizeUnit(selected);
+    const isOther = !UNITS.includes(cur);
+    const opts = UNITS.map(u => `<option value="${u}" ${!isOther && u === cur ? 'selected' : ''}>${u}</option>`).join('');
+    return `
+        <select id="${id}" class="form-control" onchange="toggleUnitOther('${id}')">
+            ${opts}
+            <option value="${OTHER_UNIT}" ${isOther ? 'selected' : ''}>${OTHER_UNIT} (دلخواه)</option>
+        </select>
+        <input type="text" id="${id}Other" class="form-control" placeholder="واحد دلخواه (مثلاً رول، جوره، لیتر)" style="margin-top:6px;${isOther ? '' : 'display:none'}" value="${isOther ? escAttr(cur) : ''}">
+    `;
+}
+
+function toggleUnitOther(id) {
+    const sel = $(id), other = $(id + 'Other');
+    if (!sel || !other) return;
+    const isOther = sel.value === OTHER_UNIT;
+    other.style.display = isOther ? '' : 'none';
+    if (isOther) other.focus();
+}
+
+function readUnit(id) {
+    const sel = $(id);
+    if (!sel) return DEFAULT_UNIT;
+    if (sel.value === OTHER_UNIT) return normalizeUnit($(id + 'Other') ? $(id + 'Other').value : '');
+    return normalizeUnit(sel.value);
+}
+
+function setUnitPicker(id, value) {
+    const sel = $(id), other = $(id + 'Other');
+    if (!sel) return;
+    const cur = normalizeUnit(value);
+    if (UNITS.includes(cur)) {
+        sel.value = cur;
+        if (other) { other.value = ''; other.style.display = 'none'; }
+    } else {
+        sel.value = OTHER_UNIT;
+        if (other) { other.value = cur; other.style.display = ''; }
+    }
+}
 let txPage = 1;
 const TX_PER_PAGE = 5;
 let allTransactions = [];
@@ -166,9 +225,10 @@ function renderProducts(products) {
         <tr>
             <td>${p.id}</td>
             <td>${p.name}</td>
+            <td><span class="badge badge-info">${normalizeUnit(p.unit)}</span></td>
             <td>${formatMoney(p.buyPrice)}</td>
             <td>${formatMoney(p.sellPrice)}</td>
-            <td><span class="badge badge-${p.stock < 10 ? 'danger' : p.stock < 30 ? 'warning' : 'success'}">${p.stock}</span></td>
+            <td><span class="badge badge-${p.stock < 10 ? 'danger' : p.stock < 30 ? 'warning' : 'success'}">${formatQty(p.stock)} ${normalizeUnit(p.unit)}</span></td>
             <td>
                 <button class="btn btn-sm btn-primary" onclick="editProduct(${p.id})">✏️</button>
                 <button class="btn btn-sm btn-danger" onclick="deleteProduct(${p.id})">🗑️</button>
@@ -186,9 +246,10 @@ $('addProductBtn').onclick = () => {
     Modal.open('افزودن محصول', `
         <div class="form-group"><label>نام محصول</label><input type="text" id="pName" class="form-control"></div>
 
+        <div class="form-group"><label>واحد اندازه‌گیری</label>${unitSelectHtml('pUnit', DEFAULT_UNIT)}</div>
         <div class="form-group"><label>قیمت خرید (افغانی)</label><input type="number" id="pBuy" class="form-control"></div>
         <div class="form-group"><label>قیمت فروش (افغانی)</label><input type="number" id="pSell" class="form-control"></div>
-        <div class="form-group"><label>موجودی اولیه</label><input type="number" id="pStock" class="form-control" value="0"></div>
+        <div class="form-group"><label>موجودی اولیه</label><input type="number" id="pStock" class="form-control" value="0" step="any"></div>
     `, '<button class="btn btn-primary" onclick="saveProduct()">ذخیره</button>');
 };
 
@@ -198,17 +259,19 @@ function saveProduct() {
     const buyPrice = Number($('pBuy').value) || 0;
     const sellPrice = Number($('pSell').value) || 0;
     const addStock = Number($('pStock').value) || 0;
+    const unit = readUnit('pUnit');
 
-    // Check if product with same name + buyPrice + sellPrice already exists
-    const existing = DB.getProducts().find(p => p.name === name && p.buyPrice === buyPrice && p.sellPrice === sellPrice);
+    // Check if product with same name + unit + buyPrice + sellPrice already exists
+    const existing = DB.getProducts().find(p => p.name === name && normalizeUnit(p.unit) === unit && p.buyPrice === buyPrice && p.sellPrice === sellPrice);
     if (existing) {
         // Add to existing product's stock
-        DB.updateProduct(existing.id, { stock: existing.stock + addStock });
-        CloudSync._showSyncNotification(`✅ «${name}» به محصول موجود اضافه شد (موجودی: ${existing.stock + addStock})`);
+        DB.updateProduct(existing.id, { stock: existing.stock + addStock, unit: unit });
+        CloudSync._showSyncNotification(`✅ «${name}» به محصول موجود اضافه شد (موجودی: ${formatQty(existing.stock + addStock)} ${unit})`);
     } else {
         // Create new product
         DB.addProduct({
             name,
+            unit,
             buyPrice, sellPrice, stock: addStock
         });
         CloudSync._showSyncNotification(`✅ محصول جدید «${name}» ثبت شد`);
@@ -220,16 +283,18 @@ function saveProduct() {
 function editProduct(id) {
     const p = DB.getProduct(id);
     Modal.open('ویرایش محصول', `
-        <div class="form-group"><label>نام محصول</label><input type="text" id="pName" class="form-control" value="${p.name}"></div>
+        <div class="form-group"><label>نام محصول</label><input type="text" id="pName" class="form-control" value="${escAttr(p.name)}"></div>
+        <div class="form-group"><label>واحد اندازه‌گیری</label>${unitSelectHtml('pUnit', p.unit)}</div>
         <div class="form-group"><label>قیمت خرید</label><input type="number" id="pBuy" class="form-control" value="${p.buyPrice}"></div>
         <div class="form-group"><label>قیمت فروش</label><input type="number" id="pSell" class="form-control" value="${p.sellPrice}"></div>
-        <div class="form-group"><label>موجودی</label><input type="number" id="pStock" class="form-control" value="${p.stock}"></div>
+        <div class="form-group"><label>موجودی</label><input type="number" id="pStock" class="form-control" value="${p.stock}" step="any"></div>
     `, `<button class="btn btn-primary" onclick="updateProduct(${id})">بروزرسانی</button>`);
 }
 
 function updateProduct(id) {
     DB.updateProduct(id, {
         name: $('pName').value,
+        unit: readUnit('pUnit'),
         buyPrice: Number($('pBuy').value),
         sellPrice: Number($('pSell').value),
         stock: Number($('pStock').value)
@@ -290,11 +355,12 @@ $('newSaleBtn').onclick = () => {
             <div class="form-group"><label>افزودن کالا</label>
                 <select id="sProduct" class="form-control" onchange="updateSalePrice()">
                     <option value="">انتخاب محصول</option>
-                    ${products.map(p => `<option value="${p.id}" data-price="${p.sellPrice}">${p.name} (خرید: ${formatMoney(p.buyPrice)} - موجودی: ${p.stock})</option>`).join('')}
+                    ${products.map(p => `<option value="${p.id}" data-price="${p.sellPrice}" data-unit="${escAttr(normalizeUnit(p.unit))}">${p.name} (خرید: ${formatMoney(p.buyPrice)} - موجودی: ${formatQty(p.stock)} ${normalizeUnit(p.unit)})</option>`).join('')}
                 </select>
             </div>
-            <div style="display:flex;gap:10px">
-                <input type="number" id="sQty" class="form-control" placeholder="تعداد" value="1" min="1">
+            <div style="display:flex;gap:10px;align-items:center">
+                <input type="number" id="sQty" class="form-control" placeholder="مقدار" value="1" min="0" step="any">
+                <span id="sUnitLabel" class="badge badge-info" style="white-space:nowrap">واحد</span>
                 <button class="btn btn-success" onclick="addSaleItem()">+ اضافه</button>
             </div>
             <div id="saleItemsList" style="margin-top:15px"></div>
@@ -311,21 +377,26 @@ $('newSaleBtn').onclick = () => {
 };
 
 function updateSalePrice() {
-    // auto-fill if needed
+    // Show the selected product's unit next to the quantity box
+    const sel = $('sProduct');
+    const label = $('sUnitLabel');
+    if (!sel || !label) return;
+    const opt = sel.options[sel.selectedIndex];
+    label.textContent = (opt && opt.dataset.unit) ? opt.dataset.unit : 'واحد';
 }
 
 function addSaleItem() {
     const pid = Number($('sProduct').value);
     const qty = Number($('sQty').value);
-    if (!pid || qty < 1) return alert('محصول و تعداد را مشخص کنید');
+    if (!pid || qty <= 0) return alert('محصول و مقدار را مشخص کنید');
     const p = DB.getProduct(pid);
     if (!p || p.stock < qty) return alert('موجودی کافی نیست');
-    
+
     const existing = saleItems.find(i => i.productId === pid);
     if (existing) {
         existing.qty += qty;
     } else {
-        saleItems.push({ productId: pid, name: p.name, price: p.sellPrice, qty });
+        saleItems.push({ productId: pid, name: p.name, unit: normalizeUnit(p.unit), price: p.sellPrice, qty });
     }
     renderSaleItems();
 }
@@ -334,7 +405,7 @@ function renderSaleItems() {
     $('saleItemsList').innerHTML = saleItems.map((item, i) => `
         <div class="invoice-item">
             <span>${item.name}</span>
-            <span>${item.qty} عدد</span>
+            <span>${formatQty(item.qty)} ${normalizeUnit(item.unit)}</span>
             <span>${formatMoney(item.price)}</span>
             <span>${formatMoney(item.price * item.qty)}</span>
             <button class="btn btn-sm btn-danger" onclick="removeSaleItem(${i})">×</button>
@@ -392,7 +463,8 @@ function viewSale(id) {
     const itemsRows = s.items.map(i => `
         <tr>
             <td>${i.name}</td>
-            <td style="text-align:center">${i.qty}</td>
+            <td style="text-align:center">${formatQty(i.qty)}</td>
+            <td style="text-align:center">${normalizeUnit(i.unit)}</td>
             <td style="text-align:left">${formatMoney(i.price)}</td>
             <td style="text-align:left">${formatMoney(i.price * i.qty)}</td>
         </tr>
@@ -416,7 +488,8 @@ function viewSale(id) {
                 <thead>
                     <tr style="background:#1e40af;color:#fff">
                         <th>شرح کالا / خدمات</th>
-                        <th style="text-align:center;width:70px">تعداد</th>
+                        <th style="text-align:center;width:70px">مقدار</th>
+                        <th style="text-align:center;width:70px">واحد</th>
                         <th style="text-align:left;width:120px">قیمت واحد</th>
                         <th style="text-align:left;width:120px">جمع</th>
                     </tr>
@@ -1157,7 +1230,7 @@ function renderPurchases(list) {
 $('addPurchaseBtn').onclick = () => {
     purchaseItems = [];
     const products = DB.getProducts();
-    const options = products.map(p => `<option value="${p.name}">${p.name}</option>`).join('');
+    const options = products.map(p => `<option value="${escAttr(p.name)}" data-unit="${escAttr(normalizeUnit(p.unit))}">${p.name}</option>`).join('');
     Modal.open('خریداری جدید از بازار', `
         <div class="form-row">
             <div class="form-group"><label>شماره فاکتور (فاکتور فروشنده)</label><input type="text" id="pInvoiceNo" class="form-control" placeholder="مثلاً 1024"></div>
@@ -1169,11 +1242,12 @@ $('addPurchaseBtn').onclick = () => {
         </div>
         <div class="invoice-items">
             <div class="form-group"><label>افزودن جنس</label>
-                <input type="text" id="pName" class="form-control" list="pList" placeholder="نام جنس">
+                <input type="text" id="pName" class="form-control" list="pList" placeholder="نام جنس" oninput="syncPurchaseUnitFromProduct()">
                 <datalist id="pList">${options}</datalist>
             </div>
             <div class="item-add-row">
-                <div class="form-group"><label>تعداد</label><input type="number" id="pQty" class="form-control" value="1" min="1"></div>
+                <div class="form-group"><label>مقدار</label><input type="number" id="pQty" class="form-control" value="1" min="0" step="any"></div>
+                <div class="form-group"><label>واحد</label>${unitSelectHtml('pItemUnit', DEFAULT_UNIT)}</div>
                 <div class="form-group"><label>قیمت خرید واحد</label><input type="number" id="pBuyPrice" class="form-control" value="0"></div>
                 <div class="form-group"><label>قیمت فروش واحد</label><input type="number" id="pSellPrice" class="form-control" value="0"></div>
                 <button class="btn btn-success" onclick="addPurchaseItem()">+ اضافه</button>
@@ -1188,19 +1262,29 @@ $('addPurchaseBtn').onclick = () => {
     `, '<button class="btn btn-primary" onclick="savePurchase()">ثبت خریداری</button>');
 };
 
+function syncPurchaseUnitFromProduct() {
+    // When an existing product is picked, preselect its saved unit
+    const name = ($('pName') ? $('pName').value : '').trim();
+    if (!name) return;
+    const p = DB.getProducts().find(x => String(x.name).trim() === name);
+    if (p) setUnitPicker('pItemUnit', p.unit);
+}
+
 function addPurchaseItem() {
     const productName = $('pName').value.trim();
     const qty = Number($('pQty').value) || 0;
+    const unit = readUnit('pItemUnit');
     const unitPrice = Number($('pBuyPrice').value) || 0;
     const sellPrice = Number($('pSellPrice').value) || unitPrice;
-    if (!productName || qty <= 0 || unitPrice <= 0) return alert('لطفاً نام جنس، تعداد و قیمت خرید را وارد کنید');
+    if (!productName || qty <= 0 || unitPrice <= 0) return alert('لطفاً نام جنس، مقدار و قیمت خرید را وارد کنید');
 
-    const existing = purchaseItems.find(i => i.productName === productName && i.unitPrice === unitPrice);
+    const existing = purchaseItems.find(i => i.productName === productName && i.unitPrice === unitPrice && normalizeUnit(i.unit) === unit);
     if (existing) {
         existing.qty += qty;
+        existing.lineTotal = existing.qty * existing.unitPrice;
         if (sellPrice > 0) existing.sellPrice = sellPrice;
     } else {
-        purchaseItems.push({ productName, qty, unitPrice, sellPrice, lineTotal: qty * unitPrice });
+        purchaseItems.push({ productName, unit, qty, unitPrice, sellPrice, lineTotal: qty * unitPrice });
     }
     // Reset inputs for next item
     $('pName').value = '';
@@ -1214,7 +1298,7 @@ function renderPurchaseItems() {
     $('purchaseItemsList').innerHTML = purchaseItems.map((item, i) => `
         <div class="invoice-item">
             <span>${item.productName}</span>
-            <span>${item.qty} عدد</span>
+            <span>${formatQty(item.qty)} ${normalizeUnit(item.unit)}</span>
             <span>خرید: ${formatMoney(item.unitPrice)}</span>
             <span>فروش: ${formatMoney(item.sellPrice)}</span>
             <span><strong>${formatMoney(item.lineTotal)}</strong></span>
@@ -1244,7 +1328,7 @@ function savePurchase() {
     if (paid < 0 || paid > total) return alert('مبلغ پرداخت‌شده نامعتبر است');
 
     DB.addPurchase({
-        items: purchaseItems.map(i => ({ productName: i.productName, qty: i.qty, unitPrice: i.unitPrice, sellPrice: i.sellPrice, lineTotal: i.lineTotal })),
+        items: purchaseItems.map(i => ({ productName: i.productName, unit: normalizeUnit(i.unit), qty: i.qty, unitPrice: i.unitPrice, sellPrice: i.sellPrice, lineTotal: i.lineTotal })),
         total,
         paid,
         invoiceNo: $('pInvoiceNo').value.trim(),
@@ -1267,7 +1351,8 @@ function viewPurchase(id) {
     const itemsRows = items.map(i => `
         <tr>
             <td>${i.productName}</td>
-            <td style="text-align:center">${i.qty}</td>
+            <td style="text-align:center">${formatQty(i.qty)}</td>
+            <td style="text-align:center">${normalizeUnit(i.unit)}</td>
             <td style="text-align:left">${formatMoney(i.unitPrice)}</td>
             <td style="text-align:left">${formatMoney(i.sellPrice)}</td>
             <td style="text-align:left"><strong>${formatMoney(i.lineTotal)}</strong></td>
@@ -1293,7 +1378,8 @@ function viewPurchase(id) {
                 <thead>
                     <tr style="background:#059669;color:#fff">
                         <th>نام جنس</th>
-                        <th style="text-align:center;width:70px">تعداد</th>
+                        <th style="text-align:center;width:70px">مقدار</th>
+                        <th style="text-align:center;width:70px">واحد</th>
                         <th style="text-align:left;width:110px">قیمت خرید</th>
                         <th style="text-align:left;width:110px">قیمت فروش</th>
                         <th style="text-align:left;width:110px">جمع</th>
@@ -1871,6 +1957,7 @@ function renderInventoryReport(content, summary) {
                             <th>قیمت خرید</th>
                             <th>قیمت فروش</th>
                             <th>موجودی</th>
+                            <th>واحد</th>
                             <th>ارزش خرید</th>
                             <th>ارزش فروش</th>
                             <th>سود بالقوه</th>
@@ -1889,19 +1976,21 @@ function renderInventoryReport(content, summary) {
                                     <td>${p.name}</td>
                                     <td>${formatMoney(p.buyPrice)}</td>
                                     <td>${formatMoney(p.sellPrice)}</td>
-                                    <td><span class="badge badge-${stockBadge}">${stock}</span></td>
+                                    <td><span class="badge badge-${stockBadge}">${formatQty(stock)}</span></td>
+                                    <td>${normalizeUnit(p.unit)}</td>
                                     <td>${formatMoney(buyVal)}</td>
                                     <td>${formatMoney(sellVal)}</td>
                                     <td><span class="badge badge-${profit >= 0 ? 'success' : 'danger'}">${formatMoney(profit)}</span></td>
                                 </tr>
                             `;
-                        }).join('') : '<tr><td colspan="8" class="report-empty"><div class="empty-icon">📭</div>محصولی ثبت نشده</td></tr>'}
+                        }).join('') : '<tr><td colspan="9" class="report-empty"><div class="empty-icon">📭</div>محصولی ثبت نشده</td></tr>'}
                     </tbody>
                     ${products.length ? `
                     <tfoot>
                         <tr>
                             <td colspan="4">جمع کل</td>
-                            <td>${totalItems.toLocaleString('fa-AF')}</td>
+                            <td>${formatQty(totalItems)}</td>
+                            <td>-</td>
                             <td>${formatMoney(totalBuyValue)}</td>
                             <td>${formatMoney(totalSellValue)}</td>
                             <td><strong>${formatMoney(potentialProfit)}</strong></td>
@@ -1918,8 +2007,8 @@ function renderInventoryReport(content, summary) {
             <div class="summary-value">${products.length}</div>
         </div>
         <div class="summary-card">
-            <div class="summary-label">مجموع موجودی</div>
-            <div class="summary-value">${totalItems.toLocaleString('fa-AF')} عدد</div>
+            <div class="summary-label">مجموع موجودی (همه واحدها)</div>
+            <div class="summary-value">${formatQty(totalItems)}</div>
         </div>
         <div class="summary-card">
             <div class="summary-label">ارزش انبار (خرید)</div>
@@ -2367,15 +2456,15 @@ function xlGroupInvoices(rows, idAliases) {
 
 const SECTION_COLUMNS = {
     inventory: {
-        headers: ['شماره', 'نام محصول', 'قیمت خرید', 'قیمت فروش', 'موجودی'],
-        keys: ['id', 'name', 'buyPrice', 'sellPrice', 'stock'],
-        getData: () => DB.getProducts(),
-        addRow: (row) => DB.addProduct({ name: row['نام محصول'] || '', buyPrice: Number(row['قیمت خرید']) || 0, sellPrice: Number(row['قیمت فروش']) || 0, stock: Number(row['موجودی']) || 0 }),
+        headers: ['شماره', 'نام محصول', 'واحد', 'قیمت خرید', 'قیمت فروش', 'موجودی'],
+        keys: ['id', 'name', 'unit', 'buyPrice', 'sellPrice', 'stock'],
+        getData: () => DB.getProducts().map(p => ({ ...p, unit: normalizeUnit(p.unit) })),
+        addRow: (row) => DB.addProduct({ name: row['نام محصول'] || '', unit: normalizeUnit(row['واحد'] || row['یونیت'] || row['مقیاس'] || ''), buyPrice: Number(row['قیمت خرید']) || 0, sellPrice: Number(row['قیمت فروش']) || 0, stock: Number(row['موجودی']) || 0 }),
         reload: loadInventory
     },
     purchases: {
         // یک ردیف برای هر جنس تا تعداد و قیمت فی در ستون جداگانه بیاید
-        headers: ['شماره خرید', 'شماره فاکتور', 'تاریخ', 'فروشنده', 'نام جنس', 'تعداد', 'قیمت خرید فی', 'قیمت فروش فی', 'مبلغ قلم', 'مبلغ کل فاکتور', 'پرداخت‌شده', 'باقی‌مانده', 'توضیحات'],
+        headers: ['شماره خرید', 'شماره فاکتور', 'تاریخ', 'فروشنده', 'نام جنس', 'مقدار', 'واحد', 'قیمت خرید فی', 'قیمت فروش فی', 'مبلغ قلم', 'مبلغ کل فاکتور', 'پرداخت‌شده', 'باقی‌مانده', 'توضیحات'],
         keys: null,
         getRows: () => {
             const rows = [];
@@ -2389,7 +2478,8 @@ const SECTION_COLUMNS = {
                         'تاریخ': p.date || '',
                         'فروشنده': p.supplier || '',
                         'نام جنس': i.productName || '',
-                        'تعداد': Number(i.qty) || 0,
+                        'مقدار': Number(i.qty) || 0,
+                        'واحد': normalizeUnit(i.unit),
                         'قیمت خرید فی': Number(i.unitPrice) || 0,
                         'قیمت فروش فی': Number(i.sellPrice) || 0,
                         'مبلغ قلم': Number(i.lineTotal) || ((Number(i.qty) || 0) * (Number(i.unitPrice) || 0)),
@@ -2414,7 +2504,8 @@ const SECTION_COLUMNS = {
                     const unitPrice = xlNumber(r, ['قیمت خرید فی', 'قیمت خرید', 'قیمت فی']);
                     return {
                         productName: xlText(r, ['نام جنس', 'نام محصول', 'جنس']),
-                        qty: xlNumber(r, ['تعداد', 'مقدار']),
+                        unit: normalizeUnit(xlText(r, ['واحد', 'یونیت', 'مقیاس'])),
+                        qty: xlNumber(r, ['مقدار', 'تعداد']),
                         unitPrice: unitPrice,
                         sellPrice: xlNumber(r, ['قیمت فروش فی', 'قیمت فروش']) || unitPrice
                     };
@@ -2437,7 +2528,7 @@ const SECTION_COLUMNS = {
     },
     sales: {
         // یک ردیف برای هر کالای فروشته‌شده
-        headers: ['شماره فاکتور', 'تاریخ', 'مشتری', 'شماره تماس', 'نام جنس', 'تعداد', 'قیمت فی', 'مبلغ قلم', 'جمع اقلام', 'تخفیف', 'مبلغ نهایی', 'پرداخت‌شده', 'بدهی'],
+        headers: ['شماره فاکتور', 'تاریخ', 'مشتری', 'شماره تماس', 'نام جنس', 'مقدار', 'واحد', 'قیمت فی', 'مبلغ قلم', 'جمع اقلام', 'تخفیف', 'مبلغ نهایی', 'پرداخت‌شده', 'بدهی'],
         keys: null,
         getRows: () => {
             const rows = [];
@@ -2453,7 +2544,8 @@ const SECTION_COLUMNS = {
                         'مشتری': s.customer || '',
                         'شماره تماس': s.phone || '',
                         'نام جنس': i.name || '',
-                        'تعداد': qty,
+                        'مقدار': qty,
+                        'واحد': normalizeUnit(i.unit),
                         'قیمت فی': price,
                         'مبلغ قلم': qty * price,
                         'جمع اقلام': first ? (Number(s.subtotal) || 0) : '',
@@ -2476,14 +2568,15 @@ const SECTION_COLUMNS = {
                 const items = [];
                 g.rows.forEach(r => {
                     const name = xlText(r, ['نام جنس', 'نام محصول', 'جنس']);
-                    const qty = xlNumber(r, ['تعداد', 'مقدار']);
+                    const qty = xlNumber(r, ['مقدار', 'تعداد']);
+                    const unit = normalizeUnit(xlText(r, ['واحد', 'یونیت', 'مقیاس']));
                     const price = xlNumber(r, ['قیمت فی', 'قیمت فروش فی', 'قیمت فروش', 'قیمت']);
                     if (!name || qty <= 0) return;
                     let product = DB.getProducts().find(p => String(p.name).trim() === name);
                     if (!product) {
-                        product = DB.addProduct({ name: name, buyPrice: price, sellPrice: price, stock: qty });
+                        product = DB.addProduct({ name: name, unit: unit, buyPrice: price, sellPrice: price, stock: qty });
                     }
-                    items.push({ productId: product.id, name: name, qty: qty, price: price });
+                    items.push({ productId: product.id, name: name, unit: normalizeUnit(product.unit || unit), qty: qty, price: price });
                 });
                 if (!items.length) return;
                 const h = g.head;

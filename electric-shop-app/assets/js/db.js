@@ -103,6 +103,8 @@ const DB = {
             // Multi-item purchase
             purchase.items.forEach(item => {
                 item.productName = (item.productName || '').trim();
+                item.unit = (item.unit || '').toString().trim() || 'دانه';
+                if (item.unit === 'عدد') item.unit = 'دانه';
                 item.qty = Number(item.qty) || 0;
                 item.unitPrice = Number(item.unitPrice) || 0;
                 item.sellPrice = Number(item.sellPrice) || item.unitPrice;
@@ -113,6 +115,7 @@ const DB = {
             // Legacy single-item format (backward compat)
             purchase.items = [{
                 productName: purchase.productName || '',
+                unit: (purchase.unit || 'دانه'),
                 qty: Number(purchase.qty) || 0,
                 unitPrice: Number(purchase.unitPrice) || 0,
                 sellPrice: Number(purchase.sellPrice) || (Number(purchase.unitPrice) || 0),
@@ -128,9 +131,10 @@ const DB = {
         // Add or update each item's product in inventory
         purchase.items.forEach(item => {
             if (!item.productName) return;
-            let product = data.products.find(p => p.name === item.productName && p.buyPrice === item.unitPrice && p.sellPrice === item.sellPrice);
+            let product = data.products.find(p => p.name === item.productName && p.buyPrice === item.unitPrice && p.sellPrice === item.sellPrice && ((p.unit || 'دانه') === item.unit || (p.unit === 'عدد' && item.unit === 'دانه')));
             if (product) {
                 product.stock += item.qty;
+                if (!product.unit || product.unit === 'عدد') product.unit = item.unit;
                 if (item.unitPrice > 0) product.buyPrice = item.unitPrice;
                 item.productId = product.id;
             } else {
@@ -140,6 +144,7 @@ const DB = {
                 const newProduct = {
                     id: this.getNextId('product', data),
                     name: item.productName,
+                    unit: item.unit,
                     buyPrice: item.unitPrice,
                     sellPrice: item.sellPrice,
                     stock: item.qty
