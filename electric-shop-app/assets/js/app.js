@@ -800,8 +800,9 @@ function viewProject(id) {
             <td style="padding:4px 8px; font-size:13px;">${t.date || '-'}</td>
             <td style="padding:4px 8px; font-size:13px;">${t.description}</td>
             <td style="padding:4px 8px; font-size:13px; text-align:left; direction:ltr;">${formatMoney(t.amount)}</td>
+            <td class="no-print" style="padding:4px 8px; text-align:center;"><button class="btn btn-sm btn-danger no-print" onclick="deleteProjectPayment(${t.id}, '${String(p.id)}')">🗑️</button></td>
         </tr>
-    `).join('') || '<tr><td colspan="3" style="text-align:center; padding:8px; font-size:13px; color:#666;">تراکنشی ثبت نشده</td></tr>';
+    `).join('') || '<tr><td colspan="4" style="text-align:center; padding:8px; font-size:13px; color:#666;">تراکنشی ثبت نشده</td></tr>';
 
     Modal.open('جزئیات پروژه', `
         <div class="print-section" style="font-family: Vazirmatn, Tahoma, sans-serif; line-height:1.5; font-size:13px; color:#1e293b;">
@@ -865,8 +866,9 @@ function viewProject(id) {
                 <thead>
                     <tr style="background:#f1f5f9;">
                         <th style="padding:5px 8px; border:1px solid #cbd5e1; font-size:12px; color:#334155; text-align:right; width:22%;">تاریخ</th>
-                        <th style="padding:5px 8px; border:1px solid #cbd5e1; font-size:12px; color:#334155; text-align:right; width:53%;">شرح</th>
-                        <th style="padding:5px 8px; border:1px solid #cbd5e1; font-size:12px; color:#334155; text-align:left; direction:ltr; width:25%;">مبلغ (افغانی)</th>
+                        <th style="padding:5px 8px; border:1px solid #cbd5e1; font-size:12px; color:#334155; text-align:right; width:45%;">شرح</th>
+                        <th style="padding:5px 8px; border:1px solid #cbd5e1; font-size:12px; color:#334155; text-align:left; direction:ltr; width:23%;">مبلغ (افغانی)</th>
+                        <th class="no-print" style="padding:5px 8px; border:1px solid #cbd5e1; font-size:12px; color:#334155; text-align:center; width:10%;">حذف</th>
                     </tr>
                 </thead>
                 <tbody>${txRows}</tbody>
@@ -878,6 +880,16 @@ function viewProject(id) {
             </div>
         </div>
     `, `<button class="btn btn-primary no-print" onclick="window.print()">🖨️ پرینت</button>`);
+}
+
+// Delete a single payment row from the project details view.
+// The amount is removed from the project's paid total as well.
+function deleteProjectPayment(txId, projectId) {
+    if (!confirm('این پرداخت حذف شود؟ مبلغ آن از پرداختی پروژه کم می‌شود.')) return;
+    DB.deleteTransaction(txId);
+    refreshAfterTransactionChange();
+    Modal.close();
+    viewProject(projectId);
 }
 
 // ==================== EMPLOYEES ====================
@@ -1086,7 +1098,23 @@ function saveTransaction() {
 }
 
 function deleteTransaction(id) {
-    if (confirm('حذف شود؟')) { DB.deleteTransaction(id); txPage = 1; loadFinance(); }
+    if (!confirm('حذف شود؟ اگر این یک پرداخت باشد، از مجموع پرداختی مربوطه هم کم می‌شود.')) return;
+    DB.deleteTransaction(id);
+    txPage = 1;
+    refreshAfterTransactionChange();
+}
+
+// A transaction can be linked to a project / sale / repair / employee / purchase,
+// so every related view must be refreshed after it is removed.
+function refreshAfterTransactionChange() {
+    loadFinance();
+    loadProjects();
+    loadSales();
+    loadRepairs();
+    loadEmployees();
+    loadPurchases();
+    loadDebtors();
+    loadDashboard();
 }
 
 // ==================== DEBTORS ====================

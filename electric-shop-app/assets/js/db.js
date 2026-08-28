@@ -548,10 +548,78 @@ const DB = {
         this.save(data);
         return tr;
     },
+    /* Deleting a transaction must also reverse whatever record it was
+       created from, otherwise a deleted payment would keep inflating
+       project / sale / repair / employee "paid" totals. */
     deleteTransaction(id) {
         const data = this.getAll();
-        data.transactions = data.transactions.filter(t => t.id !== id);
+        const tr = data.transactions.find(t => String(t.id) === String(id));
+        if (!tr) return false;
+        const amount = Number(tr.amount) || 0;
+        const sameRef = rec => String(rec.id) === String(tr.refId);
+        const notBelow0 = n => (n > 0 ? n : 0);
+
+        if (amount > 0) {
+            switch (tr.refType) {
+                // Project prepayment / project payment / debt payment routed to a project
+                case 'project': {
+                    const project = (data.projects || []).find(sameRef);
+                    if (project) {
+                        project.paid = notBelow0((Number(project.paid) || 0) - amount);
+                    }
+                    break;
+                }
+                // Invoice payment or later debt collection on a sale
+                case 'sale':
+                case 'sale_payment': {
+                    const sale = (data.sales || []).find(sameRef);
+                    if (sale) {
+                        const back = Math.min(amount, Number(sale.paid) || 0);
+                        sale.paid = notBelow0((Number(sale.paid) || 0) - back);
+                        sale.debt = (Number(sale.debt) || 0) + back;
+                    }
+                    break;
+                }
+                // Repair income or repair payment
+                case 'repair':
+                case 'repair_payment': {
+                    const repair = (data.repairs || []).find(sameRef);
+                    if (repair) {
+                        const back = Math.min(amount, Number(repair.paid) || 0);
+                        repair.paid = notBelow0((Number(repair.paid) || 0) - back);
+                        repair.remaining = notBelow0((Number(repair.cost) || 0) - repair.paid);
+                    }
+                    break;
+                }
+                // Salary / share paid to an employee
+                case 'employee': {
+                    const emp = (data.employees || []).find(sameRef);
+                    if (emp) {
+                        emp.paid = notBelow0((Number(emp.paid) || 0) - amount);
+                        const debt = (Number(emp.salary) || 0) - emp.paid;
+                        emp.debt = notBelow0(debt);
+                    }
+                    break;
+                }
+                // Purchase paid amount goes back to market debt
+                case 'purchase': {
+                    const purchase = (data.purchases || []).find(sameRef);
+                    if (purchase) {
+                        const back = Math.min(amount, Number(purchase.paid) || 0);
+                        purchase.paid = notBelow0((Number(purchase.paid) || 0) - back);
+                        purchase.remaining = (Number(purchase.remaining) || 0) + back;
+                        data.marketDebt = (Number(data.marketDebt) || 0) + back;
+                    }
+                    break;
+                }
+                default:
+                    break;
+            }
+        }
+
+        data.transactions = data.transactions.filter(t => String(t.id) !== String(id));
         this.save(data);
+        return true;
     },
 
     // Debtors - dynamically built from sales, repairs, and projects
