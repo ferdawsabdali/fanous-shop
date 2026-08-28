@@ -497,7 +497,7 @@ const DB = {
     },
     updateProject(id, updated) {
         const data = this.getAll();
-        const idx = data.projects.findIndex(p => p.id === id);
+        const idx = data.projects.findIndex(p => String(p.id) === String(id));
         if (idx > -1) {
             data.projects[idx] = { ...data.projects[idx], ...updated };
             this.save(data);
@@ -505,9 +505,9 @@ const DB = {
     },
     deleteProject(id) {
         const data = this.getAll();
-        data.projects = data.projects.filter(p => p.id !== id);
+        data.projects = data.projects.filter(p => String(p.id) !== String(id));
         // Remove linked transactions
-        data.transactions = data.transactions.filter(t => !(t.refType === 'project' && t.refId === id));
+        data.transactions = data.transactions.filter(t => !(t.refType === 'project' && String(t.refId) === String(id)));
         this.save(data);
     },
     
@@ -590,7 +590,7 @@ const DB = {
         // From projects
         data.projects.forEach(p => {
             const remaining = (p.amount || 0) - (p.paid || 0);
-            if (remaining > 0) addPerson(p.customer || p.name, p.phone, 'project', p.id, remaining, p.startDate);
+            if (remaining > 0) addPerson(p.client || p.customer || p.name, p.phone, 'project', p.id, remaining, p.startDate);
         });
 
         return Object.values(map);
@@ -668,13 +668,17 @@ const DB = {
             this.save(data);
         }
     },
-    payDebtor(id, amount) {
+    payDebtor(id, amount, date) {
         const data = this.getAll();
         const debtors = this.getDebtors();
         const debtor = debtors.find(d => d.id === id);
         if (!debtor || amount <= 0) return false;
 
+        const payDate = date || todayJalali();
         let remaining = amount;
+        // Each portion of the payment is logged against its own source so that
+        // sale / repair / project detail views can show it.
+        const logs = [];
 
         // Pay sales first
         for (const source of debtor.sources.filter(s => s.type === 'sale')) {
@@ -685,6 +689,13 @@ const DB = {
                 sale.debt -= pay;
                 sale.paid = (sale.paid || 0) + pay;
                 remaining -= pay;
+                logs.push({
+                    description: `دریافت بدهی فروش #${sale.id} - ${debtor.name}`,
+                    amount: pay,
+                    category: 'بدهی مشتری',
+                    refType: 'sale_payment',
+                    refId: sale.id
+                });
             }
         }
 
@@ -697,40 +708,75 @@ const DB = {
                 repair.paid += pay;
                 repair.remaining -= pay;
                 remaining -= pay;
+                logs.push({
+                    description: `دریافت بدهی تعمیر #${repair.id} - ${debtor.name}`,
+                    amount: pay,
+                    category: 'بدهی مشتری',
+                    refType: 'repair_payment',
+                    refId: repair.id
+                });
             }
         }
 
         // Then projects
         for (const source of debtor.sources.filter(s => s.type === 'project')) {
             if (remaining <= 0) break;
-            const project = data.projects.find(p => p.id === source.id);
+            const project = data.projects.find(p => String(p.id) === String(source.id));
             if (project) {
                 const projRemaining = (project.amount || 0) - (project.paid || 0);
                 if (projRemaining > 0) {
                     const pay = Math.min(remaining, projRemaining);
                     project.paid = (project.paid || 0) + pay;
                     remaining -= pay;
+                    logs.push({
+                        description: `پرداخت پروژه: ${project.name} (از قرض‌داری)`,
+                        amount: pay,
+                        category: 'پروژه',
+                        refType: 'project',
+                        refId: project.id
+                    });
                 }
             }
         }
 
-        // Add income transaction for payment
-        const tr = {
-            type: 'income',
-            description: `دریافت بدهی - ${debtor.name}`,
-            amount: amount,
-            category: 'بدهی مشتری',
-            date: todayJalali(),
-            refType: 'debtor_payment',
-            refId: id
-        };
-        tr.id = this.getNextId('transaction', data);
-        data.transactions.push(tr);
+        // Anything that could not be matched to a source stays as a generic payment
+        if (remaining > 0) {
+            logs.push({
+                description: `دریافت بدهی - ${debtor.name}`,
+                amount: remaining,
+                category: 'بدهی مشتری',
+                refType: 'debtor_payment',
+                refId: id
+            });
+        }
+        if (!logs.length) {
+            logs.push({
+                description: `دریافت بدهی - ${debtor.name}`,
+                amount: amount,
+                category: 'بدهی مشتری',
+                refType: 'debtor_payment',
+                refId: id
+            });
+        }
+
+        for (const log of logs) {
+            const tr = {
+                type: 'income',
+                description: log.description,
+                amount: log.amount,
+                category: log.category,
+                date: payDate,
+                refType: log.refType,
+                refId: log.refId
+            };
+            tr.id = this.getNextId('transaction', data);
+            data.transactions.push(tr);
+        }
 
         this.save(data);
         return true;
     },
-    payCreditor(id, amount) {
+    payCreditor(id, amount, date) {
         const data = this.getAll();
         const creditors = this.getCreditors();
         const creditor = creditors.find(c => c.id === id);
@@ -755,7 +801,7 @@ const DB = {
             description: `پرداخت بدهی به ${creditor.name}`,
             amount: amount,
             category: 'پرداخت بدهی',
-            date: todayJalali(),
+            date: date || todayJalali(),
             refType: 'creditor_payment',
             refId: id
         };

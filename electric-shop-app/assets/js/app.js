@@ -750,7 +750,7 @@ function updateProject(id) {
 }
 
 function addPaymentProject(id) {
-    const p = DB.getProjects().find(x => x.id === id);
+    const p = DB.getProjects().find(x => String(x.id) === String(id));
     if (!p) return;
     if (p.paid >= p.amount) return alert('این پروژه قبلاً تسویه شده است.');
     Modal.open('ثبت پرداخت جدید', `
@@ -764,20 +764,23 @@ function addPaymentProject(id) {
 function saveProjectPayment(id) {
     const amount = Number($('payAmount').value) || 0;
     if (amount <= 0) return alert('مبلغ نامعتبر');
-    const p = DB.getProjects().find(x => x.id === id);
-    DB.updateProject(id, { paid: p.paid + amount });
+    const p = DB.getProjects().find(x => String(x.id) === String(id));
+    if (!p) return alert('پروژه پیدا نشد');
+    DB.updateProject(p.id, { paid: (Number(p.paid) || 0) + amount });
     DB.addTransaction({
         type: 'income',
         description: `پرداخت پروژه: ${p.name}`,
         amount,
         category: 'پروژه',
-        date: $('payDate').value,
+        date: $('payDate').value || todayJalali(),
         refType: 'project',
-        refId: id
+        refId: p.id
     });
     Modal.close();
     loadProjects();
     loadFinance();
+    loadDebtors();
+    loadDashboard();
 }
 
 function deleteProject(id) {
@@ -785,11 +788,13 @@ function deleteProject(id) {
 }
 
 function viewProject(id) {
-    const p = DB.getProjects().find(x => x.id === id);
+    const p = DB.getProjects().find(x => String(x.id) === String(id));
     if (!p) return;
     const remaining = p.amount - p.paid;
     const progress = p.amount > 0 ? Math.round((p.paid / p.amount) * 100) : 0;
-    const transactions = DB.getTransactions().filter(t => t.refType === 'project' && t.refId === id).reverse();
+    const transactions = DB.getTransactions()
+        .filter(t => t.refType === 'project' && String(t.refId) === String(id))
+        .reverse();
     let txRows = transactions.map(t => `
         <tr>
             <td style="padding:4px 8px; font-size:13px;">${t.date || '-'}</td>
@@ -1154,7 +1159,7 @@ function saveDebtorPayment(id) {
     const d = DB.getDebtors().find(x => x.id === id);
     if (!d) return;
     if (amount > d.totalDebt) return alert('مبلغ بیشتر از بدهی است');
-    DB.payDebtor(id, amount);
+    DB.payDebtor(id, amount, $('debtPayDate') ? $('debtPayDate').value : '');
     Modal.close();
     loadDebtors();
     loadFinance();
@@ -1177,7 +1182,7 @@ function saveCreditorPayment(id) {
     const c = DB.getCreditors().find(x => x.id === id);
     if (!c) return;
     if (amount > c.totalDebt) return alert('مبلغ بیشتر از بدهی است');
-    DB.payCreditor(id, amount);
+    DB.payCreditor(id, amount, $('creditorPayDate') ? $('creditorPayDate').value : '');
     Modal.close();
     loadDebtors();
     loadFinance();
