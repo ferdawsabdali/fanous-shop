@@ -50,8 +50,8 @@ const DB = {
                 repairs: [],
                 projects: [],
                 employees: [
-                    { id: 1, name: 'شریک تجاری', role: 'شریک', phone: '', salary: 0, paid: 0, debt: 0 },
-                    { id: 2, name: 'کارگر ۱', role: 'کارگر', phone: '', salary: 8000, paid: 0, debt: 0 },
+                    { id: 1, name: 'شریک تجاری', role: 'شریک', phone: '', payType: 'monthly', salary: 0, dailyWage: 0, percentRate: 0, entries: [], paid: 0, debt: 0 },
+                    { id: 2, name: 'کارگر ۱', role: 'کارگر', phone: '', payType: 'daily', salary: 0, dailyWage: 400, percentRate: 0, entries: [], paid: 0, debt: 0 },
                 ],
                 transactions: [],
                 debtors: [],
@@ -322,12 +322,57 @@ const DB = {
         sale.date = sale.date || todayJalali();
         sale.paid = Number(sale.paid) || 0;
         sale.debt = Number(sale.debt) || 0;
+        sale.linkType = sale.linkType || '';
+        // Goods sold for a project / repair: the invoice belongs to that account
+        const link = this._resolveSaleLink(data, sale);
         data.sales.push(sale);
         // Reduce stock
         sale.items.forEach(item => {
             const p = data.products.find(pr => pr.id === item.productId);
             if (p) p.stock -= item.qty;
         });
+
+        if (link) {
+            // Add the invoice total to the project's contract / repair cost so the
+            // unpaid part shows up as that project's or repair's own balance.
+            const total = Number(sale.total) || 0;
+            // Goods are tracked separately: they raise the account balance but are
+            // NOT part of the work itself, so workers' percent shares ignore them.
+            link.rec.goodsTotal = (Number(link.rec.goodsTotal) || 0) + total;
+            if (link.kind === 'project') {
+                link.rec.amount = (Number(link.rec.amount) || 0) + total;
+                link.rec.paid = (Number(link.rec.paid) || 0) + sale.paid;
+                sale.linkName = link.rec.name;
+            } else {
+                link.rec.cost = (Number(link.rec.cost) || 0) + total;
+                link.rec.paid = (Number(link.rec.paid) || 0) + sale.paid;
+                link.rec.remaining = Math.max(0, (Number(link.rec.cost) || 0) - (Number(link.rec.paid) || 0));
+                sale.linkName = `#${link.rec.id} ${link.rec.device || ''}`;
+            }
+            // The remaining amount is now owed on the project / repair, not on the
+            // invoice itself, so it is not counted twice in the debtors list.
+            sale.linkedRemaining = Math.max(0, total - sale.paid);
+            sale.debt = 0;
+            if (sale.paid > 0) {
+                const tr = {
+                    type: 'income',
+                    description: link.kind === 'project'
+                        ? `فروش جنس برای پروژه: ${link.rec.name} (فاکتور #${sale.id})`
+                        : `فروش جنس برای ترمیم #${link.rec.id} ${link.rec.device || ''} (فاکتور #${sale.id})`,
+                    amount: sale.paid,
+                    category: link.kind === 'project' ? 'پروژه' : 'تعمیرات',
+                    date: sale.date,
+                    refType: link.kind === 'project' ? 'project' : 'repair_payment',
+                    refId: link.rec.id,
+                    saleId: sale.id
+                };
+                tr.id = this.getNextId('transaction', data);
+                data.transactions.push(tr);
+            }
+            this.save(data);
+            return sale;
+        }
+
         // Add transaction inline (based on paid amount)
         if (sale.paid > 0) {
             const tr = {
@@ -365,9 +410,38 @@ const DB = {
         this.save(data);
         return sale;
     },
+    /* Finds the project / repair a sale was linked to, if any. */
+    _resolveSaleLink(data, sale) {
+        if (!sale || !sale.linkType || sale.linkId === null || sale.linkId === undefined || sale.linkId === '') return null;
+        if (sale.linkType === 'project') {
+            const rec = (data.projects || []).find(p => String(p.id) === String(sale.linkId));
+            return rec ? { kind: 'project', rec } : null;
+        }
+        if (sale.linkType === 'repair') {
+            const rec = (data.repairs || []).find(r => String(r.id) === String(sale.linkId));
+            return rec ? { kind: 'repair', rec } : null;
+        }
+        return null;
+    },
     deleteSale(id) {
         const data = this.getAll();
         const sale = data.sales.find(s => s.id === id);
+        // Reverse the project / repair account this invoice was added to
+        const link = this._resolveSaleLink(data, sale);
+        if (link) {
+            const total = Number(sale.total) || 0;
+            const paidBack = Math.min(Number(sale.paid) || 0, Number(link.rec.paid) || 0);
+            link.rec.goodsTotal = Math.max(0, (Number(link.rec.goodsTotal) || 0) - total);
+            if (link.kind === 'project') {
+                link.rec.amount = Math.max(0, (Number(link.rec.amount) || 0) - total);
+                link.rec.paid = Math.max(0, (Number(link.rec.paid) || 0) - paidBack);
+            } else {
+                link.rec.cost = Math.max(0, (Number(link.rec.cost) || 0) - total);
+                link.rec.paid = Math.max(0, (Number(link.rec.paid) || 0) - paidBack);
+                link.rec.remaining = Math.max(0, (Number(link.rec.cost) || 0) - (Number(link.rec.paid) || 0));
+            }
+            data.transactions = data.transactions.filter(t => String(t.saleId || '') !== String(id));
+        }
         // Return stock to inventory
         if (sale && sale.items) {
             sale.items.forEach(item => {
@@ -512,15 +586,144 @@ const DB = {
     },
     
     // Employees
-    getEmployees() { return this.getAll().employees; },
+    /* Pay models:
+       - 'monthly' (کارمند / شریک): a fixed monthly salary, recorded month by month.
+       - 'daily'   (کارگر روزمزد): days worked × daily wage.
+       - 'percent' (کارگر فیصدی): a percentage of a project's contract or a repair's cost.
+       Every entitlement is stored as an entry; percent entries are recalculated
+       from the linked project / repair so they stay correct when it changes. */
+    defaultPayType(role) {
+        return role === 'کارگر' ? 'daily' : 'monthly';
+    },
+    /* One-time: rebuild goodsTotal for projects / repairs from invoices that were
+       linked to them before goods were tracked separately. */
+    migrateGoodsTotals() {
+        const data = this.getAll();
+        if (data.goodsTotalsMigrated) return;
+        (data.projects || []).forEach(p => { p.goodsTotal = 0; });
+        (data.repairs || []).forEach(r => { r.goodsTotal = 0; });
+        (data.sales || []).forEach(s => {
+            const link = this._resolveSaleLink(data, s);
+            if (link) link.rec.goodsTotal = (Number(link.rec.goodsTotal) || 0) + (Number(s.total) || 0);
+        });
+        data.goodsTotalsMigrated = true;
+        this.save(data);
+    },
+    /* Base used for a worker's percent share: only the work itself.
+       Goods sold on the project / repair invoice are excluded. */
+    percentBase(kind, rec) {
+        if (!rec) return 0;
+        const total = kind === 'project' ? (Number(rec.amount) || 0) : (Number(rec.cost) || 0);
+        const goods = Number(rec.goodsTotal) || 0;
+        return Math.max(0, total - goods);
+    },
+    percentBaseFor(refType, refId, data) {
+        const d = data || this.getAll();
+        if (refType === 'project') {
+            return this.percentBase('project', (d.projects || []).find(p => String(p.id) === String(refId)));
+        }
+        if (refType === 'repair') {
+            return this.percentBase('repair', (d.repairs || []).find(r => String(r.id) === String(refId)));
+        }
+        return 0;
+    },
+    employeeEntryAmount(data, entry) {
+        if (!entry) return 0;
+        if (entry.kind === 'percent') {
+            const rate = Number(entry.rate) || 0;
+            const base = this.percentBaseFor(entry.refType, entry.refId, data);
+            entry.base = base;
+            return Math.round(base * rate / 100);
+        }
+        if (entry.kind === 'daily') {
+            const days = Number(entry.days) || 0;
+            const rate = Number(entry.rate) || 0;
+            return Math.round(days * rate);
+        }
+        return Number(entry.amount) || 0;
+    },
+    getEmployees() {
+        const data = this.getAll();
+        let changed = false;
+        data.employees.forEach(e => {
+            e.paid = Number(e.paid) || 0;
+            e.salary = Number(e.salary) || 0;
+            e.dailyWage = Number(e.dailyWage) || 0;
+            e.percentRate = Number(e.percentRate) || 0;
+            if (!e.payType) {
+                e.payType = this.defaultPayType(e.role);
+                changed = true;
+            }
+            // Old records only had salary/paid — keep their numbers by turning the
+            // salary into a first monthly entry.
+            if (!Array.isArray(e.entries)) {
+                e.entries = e.salary > 0
+                    ? [{ id: 1, kind: 'monthly', date: e.lastPayDate || todayJalali(), amount: e.salary, note: 'حقوق ثبت‌شده قبلی' }]
+                    : [];
+                changed = true;
+            }
+            e.entries.forEach(en => { en.amount = this.employeeEntryAmount(data, en); });
+            e.earned = e.entries.reduce((s, en) => s + (Number(en.amount) || 0), 0);
+            e.debt = Math.max(0, e.earned - e.paid);
+        });
+        if (changed) this.save(data);
+        return data.employees;
+    },
     addEmployee(emp) {
         const data = this.getAll();
         emp.id = this.getNextId('employee', data);
+        emp.payType = emp.payType || this.defaultPayType(emp.role);
+        emp.salary = Number(emp.salary) || 0;
+        emp.dailyWage = Number(emp.dailyWage) || 0;
+        emp.percentRate = Number(emp.percentRate) || 0;
+        emp.entries = [];
         emp.paid = 0;
+        emp.earned = 0;
         emp.debt = 0;
         data.employees.push(emp);
         this.save(data);
         return emp;
+    },
+    // Adds one entitlement row (monthly salary, days worked, or a percent share)
+    addEmployeeEntry(empId, entry) {
+        const data = this.getAll();
+        const emp = data.employees.find(e => String(e.id) === String(empId));
+        if (!emp) return null;
+        if (!Array.isArray(emp.entries)) emp.entries = [];
+        const maxId = emp.entries.reduce((m, en) => Math.max(m, Number(en.id) || 0), 0);
+        entry.id = maxId + 1;
+        entry.date = entry.date || todayJalali();
+        emp.entries.push(entry);
+        this.save(data);
+        return entry;
+    },
+    deleteEmployeeEntry(empId, entryId) {
+        const data = this.getAll();
+        const emp = data.employees.find(e => String(e.id) === String(empId));
+        if (!emp || !Array.isArray(emp.entries)) return false;
+        emp.entries = emp.entries.filter(en => String(en.id) !== String(entryId));
+        this.save(data);
+        return true;
+    },
+    // All percent shares registered on a given project / repair
+    getWorkerShares(refType, refId) {
+        const data = this.getAll();
+        const out = [];
+        (data.employees || []).forEach(e => {
+            (e.entries || []).forEach(en => {
+                if (en.kind === 'percent' && en.refType === refType && String(en.refId) === String(refId)) {
+                    out.push({
+                        employeeId: e.id,
+                        name: e.name,
+                        role: e.role,
+                        rate: Number(en.rate) || 0,
+                        base: this.percentBaseFor(refType, refId, data),
+                        amount: this.employeeEntryAmount(data, en)
+                    });
+                }
+            });
+        });
+        return out;
     },
     updateEmployee(id, updated) {
         const data = this.getAll();
@@ -596,8 +799,8 @@ const DB = {
                     const emp = (data.employees || []).find(sameRef);
                     if (emp) {
                         emp.paid = notBelow0((Number(emp.paid) || 0) - amount);
-                        const debt = (Number(emp.salary) || 0) - emp.paid;
-                        emp.debt = notBelow0(debt);
+                        const earned = (emp.entries || []).reduce((s, en) => s + (this.employeeEntryAmount(data, en) || 0), 0);
+                        emp.debt = notBelow0(earned - emp.paid);
                     }
                     break;
                 }
@@ -924,5 +1127,6 @@ const DB = {
 
 DB.init();
 DB.normalizeProductIds();
+DB.migrateGoodsTotals();
 // 🔔 Notify CloudSync that DB is ready
 window.dispatchEvent(new Event('db-ready'));

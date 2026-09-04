@@ -103,6 +103,18 @@ body {
     color: var(--white);
 }
 
+/* Quick shortcuts in the sidebar: open a form directly */
+.nav-link.nav-shortcut {
+    border: 1px dashed rgba(255,255,255,0.35);
+    background: rgba(255,255,255,0.06);
+    padding: 10px 15px;
+    font-size: 0.92rem;
+}
+
+.nav-link.nav-shortcut:hover {
+    border-color: transparent;
+}
+
 .nav-group {
     margin-bottom: 5px;
 }

@@ -117,6 +117,29 @@ document.querySelectorAll('.nav-link[data-page]').forEach(link => {
 $('menuToggle').onclick = () => $('sidebar').classList.toggle('open');
 $('closeSidebar').onclick = () => $('sidebar').classList.remove('open');
 
+// Opens a page from code (same behaviour as clicking its sidebar link)
+function goToPage(page) {
+    const link = document.querySelector(`.nav-link[data-page="${page}"]`);
+    if (link) link.click();
+}
+
+/* Sidebar shortcuts: jump to the page and open its form right away */
+const NAV_SHORTCUTS = {
+    transaction: { page: 'finance', btn: 'addTransactionBtn' },
+    purchase: { page: 'purchases', btn: 'addPurchaseBtn' }
+};
+document.querySelectorAll('.nav-shortcut[data-shortcut]').forEach(link => {
+    link.addEventListener('click', e => {
+        e.preventDefault();
+        const cfg = NAV_SHORTCUTS[link.dataset.shortcut];
+        if (!cfg) return;
+        goToPage(cfg.page);
+        if (window.innerWidth <= 768) $('sidebar').classList.remove('open');
+        const btn = $(cfg.btn);
+        if (btn) btn.click();
+    });
+});
+
 function refreshPage(page) {
     if (page === 'dashboard') loadDashboard();
     if (page === 'inventory') loadInventory();
@@ -318,23 +341,39 @@ function loadSales() {
     renderSales(sales);
 }
 
+// Plain-text label of what a sale was linked to (used in tables and Excel)
+function saleLinkText(s) {
+    if (s.linkType === 'project') return `پروژه: ${s.linkName || s.linkId}`;
+    if (s.linkType === 'repair') return `ترمیم: ${s.linkName || ('#' + s.linkId)}`;
+    return 'فروش عادی';
+}
+
+function saleLinkBadge(s) {
+    if (s.linkType === 'project') return `<span class="badge badge-info">پروژه: ${s.linkName || s.linkId}</span>`;
+    if (s.linkType === 'repair') return `<span class="badge badge-warning">ترمیم: ${s.linkName || ('#' + s.linkId)}</span>`;
+    return '<span style="color:#94a3b8">فروش عادی</span>';
+}
+
 function renderSales(sales) {
     $('salesTable').innerHTML = sales.map(s => `
         <tr>
             <td>#${s.id}</td>
             <td>${s.customer}</td>
+            <td>${saleLinkBadge(s)}</td>
             <td>${toPersianDate(s.date)}</td>
             <td>${formatMoney(s.subtotal)}</td>
             <td>${formatMoney(s.discount)}</td>
             <td><strong>${formatMoney(s.total)}</strong></td>
             <td>${formatMoney(s.paid)}</td>
-            <td><span class="badge badge-${s.debt > 0 ? 'danger' : 'success'}">${formatMoney(s.debt)}</span></td>
+            <td>${s.linkType
+                ? `<span class="badge badge-info">${formatMoney(s.linkedRemaining || 0)} در حساب ${s.linkType === 'project' ? 'پروژه' : 'ترمیم'}</span>`
+                : `<span class="badge badge-${s.debt > 0 ? 'danger' : 'success'}">${formatMoney(s.debt)}</span>`}</td>
             <td>
                 <button class="btn btn-sm btn-primary" onclick="viewSale(${s.id})">👁️</button>
                 <button class="btn btn-sm btn-danger" onclick="deleteSale(${s.id})">🗑️</button>
             </td>
         </tr>
-    `).join('') || '<tr><td colspan="9" style="text-align:center">فاکتوری ثبت نشده</td></tr>';
+    `).join('') || '<tr><td colspan="10" style="text-align:center">فاکتوری ثبت نشده</td></tr>';
 }
 
 $('searchSale').oninput = e => {
@@ -345,7 +384,22 @@ $('searchSale').oninput = e => {
 $('newSaleBtn').onclick = () => {
     saleItems = [];
     const products = DB.getProducts().filter(p => p.stock > 0);
+    const projects = DB.getProjects();
+    const repairs = DB.getRepairs();
     Modal.open('فاکتور فروش جدید', `
+        <div class="form-row">
+            <div class="form-group"><label>نوع فروش</label>
+                <select id="sLinkType" class="form-control" onchange="onSaleLinkTypeChange()">
+                    <option value="">فروش عادی (مشتری)</option>
+                    <option value="project">برای پروژه</option>
+                    <option value="repair">برای ترمیم</option>
+                </select>
+            </div>
+            <div class="form-group" id="sLinkWrap" style="display:none">
+                <label id="sLinkLabel">انتخاب پروژه / ترمیم</label>
+                <select id="sLinkId" class="form-control" onchange="onSaleLinkTargetChange()"></select>
+            </div>
+        </div>
         <div class="form-row">
             <div class="form-group"><label>نام مشتری</label><input type="text" id="sCustomer" class="form-control"></div>
             <div class="form-group"><label>شماره تماس</label><input type="text" id="sPhone" class="form-control"></div>
@@ -374,7 +428,45 @@ $('newSaleBtn').onclick = () => {
             <div class="invoice-total" style="color:#dc2626">باقی‌مانده: <span id="sDebt">0</span> افغانی</div>
         </div>
     `, '<button class="btn btn-primary" onclick="saveSale()">ثبت فاکتور</button>');
+    saleLinkOptions = {
+        project: projects.map(p => ({ id: p.id, label: `${p.name} - ${p.client || '---'}`, customer: p.client || p.name, phone: p.phone || '' })),
+        repair: repairs.map(r => ({ id: r.id, label: `#${r.id} ${r.device || ''} - ${r.customer || ''}`, customer: r.customer || '', phone: r.phone || '' }))
+    };
 };
+
+// Options for the "sold for a project / repair" picker in the sale form
+let saleLinkOptions = { project: [], repair: [] };
+
+function onSaleLinkTypeChange() {
+    const type = $('sLinkType').value;
+    const wrap = $('sLinkWrap');
+    const sel = $('sLinkId');
+    if (!wrap || !sel) return;
+    if (!type) {
+        wrap.style.display = 'none';
+        sel.innerHTML = '';
+        return;
+    }
+    const list = saleLinkOptions[type] || [];
+    $('sLinkLabel').textContent = type === 'project' ? 'انتخاب پروژه' : 'انتخاب ترمیم';
+    sel.innerHTML = list.length
+        ? list.map(o => `<option value="${escAttr(String(o.id))}">${o.label}</option>`).join('')
+        : `<option value="">${type === 'project' ? 'پروژه‌ای ثبت نشده' : 'ترمیمی ثبت نشده'}</option>`;
+    wrap.style.display = '';
+    onSaleLinkTargetChange();
+}
+
+// Fill the customer name automatically from the chosen project / repair
+function onSaleLinkTargetChange() {
+    const type = $('sLinkType').value;
+    const sel = $('sLinkId');
+    if (!type || !sel) return;
+    const list = saleLinkOptions[type] || [];
+    const target = list.find(o => String(o.id) === String(sel.value));
+    if (!target) return;
+    if ($('sCustomer')) $('sCustomer').value = target.customer || '';
+    if ($('sPhone') && target.phone) $('sPhone').value = target.phone;
+}
 
 function updateSalePrice() {
     // Show the selected product's unit next to the quantity box
@@ -439,6 +531,18 @@ function saveSale() {
     const paid = Number($('sPaid').value) || 0;
     if (paid < 0 || paid > total) return alert('مبلغ پرداخت‌شده نامعتبر است');
     const debt = total - paid;
+
+    // Optional link: the goods were sold for a project or for a repair
+    const linkType = $('sLinkType') ? $('sLinkType').value : '';
+    let linkId = null, linkName = '';
+    if (linkType) {
+        const raw = $('sLinkId') ? $('sLinkId').value : '';
+        if (!raw) return alert(linkType === 'project' ? 'پروژه را انتخاب کنید' : 'ترمیم را انتخاب کنید');
+        linkId = raw;
+        const opt = (saleLinkOptions[linkType] || []).find(o => String(o.id) === String(raw));
+        linkName = opt ? opt.label : '';
+    }
+
     DB.addSale({
         customer,
         phone: $('sPhone').value,
@@ -448,10 +552,16 @@ function saveSale() {
         discount,
         total,
         paid,
-        debt: debt > 0 ? debt : 0
+        debt: debt > 0 ? debt : 0,
+        linkType: linkType || '',
+        linkId,
+        linkName
     });
     Modal.close();
     loadSales();
+    loadProjects();
+    loadRepairs();
+    loadFinance();
     loadDashboard();
     loadDebtors();
 }
@@ -483,6 +593,7 @@ function viewSale(id) {
             <div class="invoice-customer" style="background:#f8fafc;border:1px solid #e2e8f0;border-radius:8px;padding:0.75rem 1rem;margin-bottom:1rem;font-size:13px;">
                 <div><strong>نام مشتری:</strong> ${s.customer}</div>
                 <div><strong>شماره تماس:</strong> ${s.phone || '-'}</div>
+                ${s.linkType ? `<div><strong>${s.linkType === 'project' ? 'مربوط به پروژه' : 'مربوط به ترمیم'}:</strong> ${s.linkName || s.linkId}</div>` : ''}
             </div>
             <table class="table invoice-table" style="margin-bottom:1rem;font-size:13px;">
                 <thead>
@@ -503,7 +614,8 @@ function viewSale(id) {
                 <div style="display:flex;justify-content:space-between;margin-bottom:0.35rem"><span>تخفیف:</span><span>${formatMoney(s.discount)}</span></div>
                 <div style="display:flex;justify-content:space-between;margin-bottom:0.35rem;font-weight:700;font-size:15px;color:#1e40af"><span>قابل پرداخت:</span><span>${formatMoney(s.total)}</span></div>
                 <div style="display:flex;justify-content:space-between;margin-bottom:0.35rem"><span>پرداخت‌شده:</span><span>${formatMoney(s.paid)}</span></div>
-                <div style="display:flex;justify-content:space-between;color:#dc2626;font-weight:700"><span>باقی‌مانده:</span><span>${formatMoney(s.debt)}</span></div>
+                <div style="display:flex;justify-content:space-between;color:#dc2626;font-weight:700"><span>باقی‌مانده:</span><span>${formatMoney(s.linkType ? (s.linkedRemaining || 0) : s.debt)}</span></div>
+                ${s.linkType ? `<div style="font-size:11px;color:#64748b;margin-top:0.3rem">باقی‌مانده در حساب ${s.linkType === 'project' ? 'پروژه' : 'ترمیم'} ثبت شده است</div>` : ''}
             </div>
             <div class="invoice-footer" style="margin-top:2rem;display:flex;justify-content:space-between;font-size:12px;color:#64748b;border-top:1px dashed #cbd5e1;padding-top:1rem;">
                 <div>امضای فروشنده: _______________</div>
@@ -515,7 +627,7 @@ function viewSale(id) {
 }
 
 function deleteSale(id) {
-    if (confirm('حذف شود؟')) { DB.deleteSale(id); loadSales(); loadFinance(); loadDashboard(); loadDebtors(); }
+    if (confirm('حذف شود؟')) { DB.deleteSale(id); loadSales(); loadProjects(); loadRepairs(); loadFinance(); loadDashboard(); loadDebtors(); }
 }
 
 // ==================== REPAIRS ====================
@@ -538,6 +650,7 @@ function renderRepairs(repairs) {
             <td>${formatMoney(r.paid)}</td>
             <td class="${remainingClass}">${formatMoney(r.remaining)}</td>
             <td>
+                <button class="btn btn-sm btn-info" onclick="viewRepair(${r.id})">👁️</button>
                 ${r.remaining > 0 ? `<button class="btn btn-sm btn-success" onclick="payRepairModal(${r.id})">💰</button>` : ''}
                 <button class="btn btn-sm btn-primary" onclick="editRepair(${r.id})">✏️</button>
                 <button class="btn btn-sm btn-danger" onclick="deleteRepair(${r.id})">🗑️</button>
@@ -614,6 +727,63 @@ function updateRepair(id) {
     loadRepairs();
     loadFinance();
     loadDashboard();
+}
+
+function viewRepair(id) {
+    const r = DB.getRepairs().find(x => String(x.id) === String(id));
+    if (!r) return;
+    const payments = DB.getTransactions()
+        .filter(t => (t.refType === 'repair' || t.refType === 'repair_payment') && String(t.refId) === String(id))
+        .reverse();
+    const payRows = payments.map(t => `
+        <tr>
+            <td style="padding:4px 8px; border:1px solid #cbd5e1; font-size:12px;">${toPersianDate(t.date)}</td>
+            <td style="padding:4px 8px; border:1px solid #cbd5e1; font-size:12px;">${t.description}</td>
+            <td style="padding:4px 8px; border:1px solid #cbd5e1; font-size:12px; text-align:left; direction:ltr;">${formatMoney(t.amount)}</td>
+        </tr>
+    `).join('') || '<tr><td colspan="3" style="text-align:center; padding:8px; font-size:12px; color:#666;">پرداختی ثبت نشده</td></tr>';
+
+    Modal.open(`جزئیات ترمیم #${r.id}`, `
+        <div class="print-section" style="font-family: Vazirmatn, Tahoma, sans-serif; font-size:13px; color:#1e293b;">
+            <table style="width:100%; border-collapse:collapse; margin-bottom:12px; font-size:13px;">
+                <tr>
+                    <td style="padding:5px 8px; border:1px solid #cbd5e1; background:#f8fafc; font-weight:600; width:25%;">مشتری</td>
+                    <td style="padding:5px 8px; border:1px solid #cbd5e1; width:25%;">${r.customer || '-'}</td>
+                    <td style="padding:5px 8px; border:1px solid #cbd5e1; background:#f8fafc; font-weight:600; width:25%;">دستگاه</td>
+                    <td style="padding:5px 8px; border:1px solid #cbd5e1; width:25%;">${r.device || '-'}</td>
+                </tr>
+                <tr>
+                    <td style="padding:5px 8px; border:1px solid #cbd5e1; background:#f8fafc; font-weight:600;">مشکل</td>
+                    <td style="padding:5px 8px; border:1px solid #cbd5e1;" colspan="3">${r.issue || '-'}</td>
+                </tr>
+                <tr>
+                    <td style="padding:5px 8px; border:1px solid #cbd5e1; background:#f8fafc; font-weight:600;">تاریخ دریافت</td>
+                    <td style="padding:5px 8px; border:1px solid #cbd5e1;">${toPersianDate(r.receiveDate)}</td>
+                    <td style="padding:5px 8px; border:1px solid #cbd5e1; background:#f8fafc; font-weight:600;">وضعیت</td>
+                    <td style="padding:5px 8px; border:1px solid #cbd5e1;">${r.status || '-'}</td>
+                </tr>
+                <tr>
+                    <td style="padding:5px 8px; border:1px solid #cbd5e1; background:#f0fdfa; font-weight:600; color:#0f766e;">هزینه کل</td>
+                    <td style="padding:5px 8px; border:1px solid #cbd5e1; font-weight:700;">${formatMoney(r.cost)}</td>
+                    <td style="padding:5px 8px; border:1px solid #cbd5e1; background:#f0fdf4; font-weight:600; color:#047857;">پرداخت‌شده / باقی‌مانده</td>
+                    <td style="padding:5px 8px; border:1px solid #cbd5e1; font-weight:700;">${formatMoney(r.paid)} / <span style="color:#b91c1c">${formatMoney(r.remaining)}</span></td>
+                </tr>
+            </table>
+
+            ${buildLinkedSalesHtml('repair', r.id)}
+            ${buildWorkerSharesHtml('repair', r.id)}
+
+            <div style="font-size:14px; font-weight:700; color:#0f766e; border-bottom:1px solid #cbd5e1; padding-bottom:4px; margin-bottom:6px;">تاریخچه پرداخت‌ها</div>
+            <table style="width:100%; border-collapse:collapse; font-size:13px;">
+                <thead><tr style="background:#f1f5f9;">
+                    <th style="padding:5px 8px; border:1px solid #cbd5e1; font-size:12px; text-align:right; width:22%;">تاریخ</th>
+                    <th style="padding:5px 8px; border:1px solid #cbd5e1; font-size:12px; text-align:right;">شرح</th>
+                    <th style="padding:5px 8px; border:1px solid #cbd5e1; font-size:12px; text-align:left; direction:ltr; width:25%;">مبلغ (افغانی)</th>
+                </tr></thead>
+                <tbody>${payRows}</tbody>
+            </table>
+        </div>
+    `, `<button class="btn btn-primary no-print" onclick="window.print()">🖨️ پرینت</button>`);
 }
 
 function payRepairModal(id) {
@@ -787,6 +957,78 @@ function deleteProject(id) {
     if (confirm('حذف شود؟')) { DB.deleteProject(id); loadProjects(); loadFinance(); loadDashboard(); }
 }
 
+// Percent shares of workers registered on a project / repair
+function buildWorkerSharesHtml(refType, refId) {
+    const shares = DB.getWorkerShares(refType, refId);
+    if (!shares.length) return '';
+    const rows = shares.map(s => `
+        <tr>
+            <td style="padding:4px 8px; border:1px solid #cbd5e1; font-size:12px;">${s.name} (${s.role})</td>
+            <td style="padding:4px 8px; border:1px solid #cbd5e1; font-size:12px;">${s.rate}٪</td>
+            <td style="padding:4px 8px; border:1px solid #cbd5e1; font-size:12px; text-align:left; direction:ltr;">${formatMoney(s.base || 0)}</td>
+            <td style="padding:4px 8px; border:1px solid #cbd5e1; font-size:12px; text-align:left; direction:ltr;">${formatMoney(s.amount)}</td>
+        </tr>`).join('');
+    const sum = shares.reduce((t, s) => t + s.amount, 0);
+    const rec = refType === 'project'
+        ? DB.getProjects().find(p => String(p.id) === String(refId))
+        : DB.getRepairs().find(r => String(r.id) === String(refId));
+    const goods = Number(rec && rec.goodsTotal) || 0;
+    const note = goods > 0
+        ? `<div style="font-size:11px; color:#64748b; margin:-8px 0 12px;">جنس فروخته‌شده (${formatMoney(goods)} افغانی) در مبنای فیصدی کارگران حساب نمی‌شود.</div>`
+        : '';
+    return `
+        <div style="font-size:14px; font-weight:700; color:#0f766e; border-bottom:1px solid #cbd5e1; padding-bottom:4px; margin-bottom:6px;">سهم فیصدی کارگران</div>
+        <table style="width:100%; border-collapse:collapse; margin-bottom:12px; font-size:13px;">
+            <thead><tr style="background:#f1f5f9;">
+                <th style="padding:5px 8px; border:1px solid #cbd5e1; font-size:12px; text-align:right;">شخص</th>
+                <th style="padding:5px 8px; border:1px solid #cbd5e1; font-size:12px; text-align:right; width:16%;">فیصدی</th>
+                <th style="padding:5px 8px; border:1px solid #cbd5e1; font-size:12px; text-align:left; direction:ltr; width:26%;">مبنای کار</th>
+                <th style="padding:5px 8px; border:1px solid #cbd5e1; font-size:12px; text-align:left; direction:ltr; width:28%;">مبلغ</th>
+            </tr></thead>
+            <tbody>${rows}</tbody>
+            <tfoot><tr style="background:#f8fafc; font-weight:700;">
+                <td colspan="3" style="padding:5px 8px; border:1px solid #cbd5e1; font-size:12px;">جمع سهم کارگران</td>
+                <td style="padding:5px 8px; border:1px solid #cbd5e1; font-size:12px; text-align:left; direction:ltr;">${formatMoney(sum)}</td>
+            </tr></tfoot>
+        </table>${note}`;
+}
+
+// Builds an "goods sold for this project / repair" table used by the
+// project details and repair details views.
+function buildLinkedSalesHtml(linkType, linkId) {
+    const sales = DB.getSales().filter(s => s.linkType === linkType && String(s.linkId) === String(linkId));
+    if (!sales.length) return '';
+    const rows = sales.map(s => {
+        const names = (s.items || []).map(i => `${i.name} (${formatQty(i.qty)} ${normalizeUnit(i.unit)})`).join('، ');
+        return `
+        <tr>
+            <td style="padding:4px 8px; border:1px solid #cbd5e1; font-size:12px;">#${s.id}</td>
+            <td style="padding:4px 8px; border:1px solid #cbd5e1; font-size:12px;">${toPersianDate(s.date)}</td>
+            <td style="padding:4px 8px; border:1px solid #cbd5e1; font-size:12px;">${names || '-'}</td>
+            <td style="padding:4px 8px; border:1px solid #cbd5e1; font-size:12px; text-align:left; direction:ltr;">${formatMoney(s.total)}</td>
+            <td class="no-print" style="padding:4px 8px; border:1px solid #cbd5e1; text-align:center;"><button class="btn btn-sm btn-primary no-print" onclick="viewSale(${s.id})">👁️</button></td>
+        </tr>`;
+    }).join('');
+    const sum = sales.reduce((t, s) => t + (Number(s.total) || 0), 0);
+    return `
+        <div style="font-size:14px; font-weight:700; color:#0f766e; border-bottom:1px solid #cbd5e1; padding-bottom:4px; margin-bottom:6px;">اجناس فروخته‌شده برای این ${linkType === 'project' ? 'پروژه' : 'ترمیم'}</div>
+        <table style="width:100%; border-collapse:collapse; margin-bottom:12px; font-size:13px;">
+            <thead><tr style="background:#f1f5f9;">
+                <th style="padding:5px 8px; border:1px solid #cbd5e1; font-size:12px; text-align:right;">فاکتور</th>
+                <th style="padding:5px 8px; border:1px solid #cbd5e1; font-size:12px; text-align:right;">تاریخ</th>
+                <th style="padding:5px 8px; border:1px solid #cbd5e1; font-size:12px; text-align:right;">اقلام</th>
+                <th style="padding:5px 8px; border:1px solid #cbd5e1; font-size:12px; text-align:left; direction:ltr;">مبلغ</th>
+                <th class="no-print" style="padding:5px 8px; border:1px solid #cbd5e1; font-size:12px; text-align:center;">فاکتور</th>
+            </tr></thead>
+            <tbody>${rows}</tbody>
+            <tfoot><tr style="background:#f8fafc; font-weight:700;">
+                <td colspan="3" style="padding:5px 8px; border:1px solid #cbd5e1; font-size:12px;">جمع اجناس</td>
+                <td style="padding:5px 8px; border:1px solid #cbd5e1; font-size:12px; text-align:left; direction:ltr;">${formatMoney(sum)}</td>
+                <td class="no-print" style="border:1px solid #cbd5e1;"></td>
+            </tr></tfoot>
+        </table>`;
+}
+
 function viewProject(id) {
     const p = DB.getProjects().find(x => String(x.id) === String(id));
     if (!p) return;
@@ -803,6 +1045,9 @@ function viewProject(id) {
             <td class="no-print" style="padding:4px 8px; text-align:center;"><button class="btn btn-sm btn-danger no-print" onclick="deleteProjectPayment(${t.id}, '${String(p.id)}')">🗑️</button></td>
         </tr>
     `).join('') || '<tr><td colspan="4" style="text-align:center; padding:8px; font-size:13px; color:#666;">تراکنشی ثبت نشده</td></tr>';
+
+    // Invoices whose goods were sold for this project
+    const projGoodsHtml = buildLinkedSalesHtml('project', p.id);
 
     Modal.open('جزئیات پروژه', `
         <div class="print-section" style="font-family: Vazirmatn, Tahoma, sans-serif; line-height:1.5; font-size:13px; color:#1e293b;">
@@ -860,6 +1105,10 @@ function viewProject(id) {
             <!-- Description -->
             ${p.description ? `<div style="padding:6px 10px; background:#f8fafc; border:1px solid #e2e8f0; border-radius:4px; margin-bottom:12px; font-size:12px; color:#475569;"><strong>توضیحات:</strong> ${p.description}</div>` : ''}
 
+            <!-- Goods sold for this project -->
+            ${projGoodsHtml}
+            ${buildWorkerSharesHtml('project', p.id)}
+
             <!-- Payment History -->
             <div style="font-size:14px; font-weight:700; color:#0f766e; border-bottom:1px solid #cbd5e1; padding-bottom:4px; margin-bottom:6px;">تاریخچه پرداخت‌ها</div>
             <table style="width:100%; border-collapse:collapse; margin-bottom:10px; font-size:13px;">
@@ -904,32 +1153,93 @@ $('searchEmployee').oninput = e => {
     renderEmployees(filtered);
 };
 
+// Human-readable labels for the three pay models
+const PAY_TYPE_LABEL = { monthly: 'ماهانه', daily: 'روزمزد', percent: 'فیصدی' };
+
+function payBaseText(e) {
+    if (e.payType === 'daily') return `${formatMoney(e.dailyWage)} در روز`;
+    if (e.payType === 'percent') return `${e.percentRate || 0}٪ از هر پروژه / ترمیم`;
+    return `${formatMoney(e.salary)} در ماه`;
+}
+
 function renderEmployees(list) {
     $('employeesTable').innerHTML = list.map(e => `
         <tr>
             <td>#${e.id}</td>
             <td>${e.name}</td>
             <td><span class="badge badge-info">${e.role}</span></td>
-            <td>${e.phone}</td>
-            <td>${formatMoney(e.salary)}</td>
+            <td><span class="badge badge-${e.payType === 'percent' ? 'warning' : e.payType === 'daily' ? 'info' : 'success'}">${PAY_TYPE_LABEL[e.payType] || 'ماهانه'}</span></td>
+            <td>${e.phone || '-'}</td>
+            <td>${payBaseText(e)}</td>
+            <td>${formatMoney(e.earned || 0)}</td>
             <td>${formatMoney(e.paid)}</td>
             <td><span class="badge badge-${e.debt > 0 ? 'danger' : 'success'}">${formatMoney(e.debt)}</span></td>
             <td>
+                <button class="btn btn-sm btn-info" onclick="viewEmployee(${e.id})">👁️</button>
+                <button class="btn btn-sm btn-warning" onclick="addEmployeeEarningModal(${e.id})">➕ ${e.payType === 'daily' ? 'کارکرد' : e.payType === 'percent' ? 'سهم' : 'حقوق ماه'}</button>
                 <button class="btn btn-sm btn-success" onclick="payEmployee(${e.id})">💰 پرداخت</button>
                 <button class="btn btn-sm btn-primary" onclick="editEmployee(${e.id})">✏️</button>
                 <button class="btn btn-sm btn-danger" onclick="deleteEmployee(${e.id})">🗑️</button>
             </td>
         </tr>
-    `).join('');
+    `).join('') || '<tr><td colspan="10" style="text-align:center">شخصی ثبت نشده</td></tr>';
+}
+
+// Shared markup for the pay-model part of the person form
+function employeePayFields(e) {
+    const emp = e || {};
+    const payType = emp.payType || (emp.role === 'کارگر' ? 'daily' : 'monthly');
+    return `
+        <div class="form-group" id="ePayTypeWrap"><label>نوع مزد</label>
+            <select id="ePayType" class="form-control" onchange="onEmployeePayTypeChange()">
+                <option value="monthly" ${payType === 'monthly' ? 'selected' : ''}>ماهانه (حقوق ماه)</option>
+                <option value="daily" ${payType === 'daily' ? 'selected' : ''}>روزمزد</option>
+                <option value="percent" ${payType === 'percent' ? 'selected' : ''}>فیصدی از پروژه / ترمیم</option>
+            </select>
+            <small id="ePayHint" style="color:#64748b"></small>
+        </div>
+        <div class="form-group" id="eSalaryWrap"><label>حقوق ماهانه (افغانی)</label><input type="number" id="eSalary" class="form-control" value="${Number(emp.salary) || 0}"></div>
+        <div class="form-group" id="eDailyWrap"><label>مزد یک روز (افغانی)</label><input type="number" id="eDailyWage" class="form-control" value="${Number(emp.dailyWage) || 0}"></div>
+        <div class="form-group" id="ePercentWrap"><label>فیصدی (٪) از هر پروژه یا ترمیم</label><input type="number" id="ePercentRate" class="form-control" step="any" value="${Number(emp.percentRate) || 0}"></div>
+    `;
+}
+
+// Roles decide which pay models make sense
+function onEmployeeRoleChange() {
+    const role = $('eRole') ? $('eRole').value : '';
+    const sel = $('ePayType');
+    if (!sel) return;
+    if (role === 'کارمند' || role === 'شریک') {
+        sel.value = 'monthly';
+    } else if (role === 'کارگر' && sel.value === 'monthly') {
+        sel.value = 'daily';
+    }
+    onEmployeePayTypeChange();
+}
+
+function onEmployeePayTypeChange() {
+    const type = $('ePayType') ? $('ePayType').value : 'monthly';
+    const show = (id, on) => { if ($(id)) $(id).style.display = on ? '' : 'none'; };
+    show('eSalaryWrap', type === 'monthly');
+    show('eDailyWrap', type === 'daily');
+    show('ePercentWrap', type === 'percent');
+    if ($('ePayHint')) {
+        $('ePayHint').textContent = type === 'monthly'
+            ? 'هر ماه حقوق این شخص را با دکمه «حقوق ماه» ثبت کنید.'
+            : type === 'daily'
+                ? 'روزهای کارکرد را با دکمه «کارکرد» ثبت کنید.'
+                : 'برای هر پروژه یا ترمیم، سهم را با دکمه «سهم» ثبت کنید؛ مبلغ خودکار حساب می‌شود.';
+    }
 }
 
 $('addEmployeeBtn').onclick = () => {
     Modal.open('افزودن شخص', `
         <div class="form-group"><label>نام</label><input type="text" id="eName" class="form-control"></div>
-        <div class="form-group"><label>نقش</label><select id="eRole" class="form-control"><option>شریک</option><option>کارگر</option><option>کارمند</option><option>پیمانکار</option></select></div>
+        <div class="form-group"><label>نقش</label><select id="eRole" class="form-control" onchange="onEmployeeRoleChange()"><option>شریک</option><option>کارگر</option><option>کارمند</option><option>پیمانکار</option></select></div>
         <div class="form-group"><label>شماره تماس</label><input type="text" id="ePhone" class="form-control"></div>
-        <div class="form-group"><label>حقوق/سهم ماهانه (افغانی)</label><input type="number" id="eSalary" class="form-control" value="0"></div>
+        ${employeePayFields(null)}
     `, '<button class="btn btn-primary" onclick="saveEmployee()">ذخیره</button>');
+    onEmployeePayTypeChange();
 };
 
 function saveEmployee() {
@@ -938,25 +1248,30 @@ function saveEmployee() {
     DB.addEmployee({
         name, role: $('eRole').value,
         phone: $('ePhone').value,
-        salary: Number($('eSalary').value) || 0
+        payType: $('ePayType').value,
+        salary: Number($('eSalary').value) || 0,
+        dailyWage: Number($('eDailyWage').value) || 0,
+        percentRate: Number($('ePercentRate').value) || 0
     });
     Modal.close();
     loadEmployees();
 }
 
 function editEmployee(id) {
-    const e = DB.getEmployees().find(x => x.id === id);
+    const e = DB.getEmployees().find(x => String(x.id) === String(id));
+    if (!e) return;
     Modal.open('ویرایش شخص', `
         <div class="form-group"><label>نام</label><input type="text" id="eName" class="form-control" value="${e.name}"></div>
-        <div class="form-group"><label>نقش</label><select id="eRole" class="form-control">
+        <div class="form-group"><label>نقش</label><select id="eRole" class="form-control" onchange="onEmployeeRoleChange()">
             <option ${e.role === 'شریک' ? 'selected' : ''}>شریک</option>
             <option ${e.role === 'کارگر' ? 'selected' : ''}>کارگر</option>
             <option ${e.role === 'کارمند' ? 'selected' : ''}>کارمند</option>
             <option ${e.role === 'پیمانکار' ? 'selected' : ''}>پیمانکار</option>
         </select></div>
-        <div class="form-group"><label>شماره تماس</label><input type="text" id="ePhone" class="form-control" value="${e.phone}"></div>
-        <div class="form-group"><label>حقوق/سهم ماهانه</label><input type="number" id="eSalary" class="form-control" value="${e.salary}"></div>
+        <div class="form-group"><label>شماره تماس</label><input type="text" id="ePhone" class="form-control" value="${e.phone || ''}"></div>
+        ${employeePayFields(e)}
     `, `<button class="btn btn-primary" onclick="updateEmployee(${id})">بروزرسانی</button>`);
+    onEmployeePayTypeChange();
 }
 
 function updateEmployee(id) {
@@ -964,30 +1279,230 @@ function updateEmployee(id) {
         name: $('eName').value,
         role: $('eRole').value,
         phone: $('ePhone').value,
-        salary: Number($('eSalary').value) || 0
+        payType: $('ePayType').value,
+        salary: Number($('eSalary').value) || 0,
+        dailyWage: Number($('eDailyWage').value) || 0,
+        percentRate: Number($('ePercentRate').value) || 0
     });
     Modal.close();
     loadEmployees();
 }
 
+// Records one entitlement: a month's salary, days worked, or a percent share
+// of a project / repair.
+function addEmployeeEarningModal(id) {
+    const e = DB.getEmployees().find(x => String(x.id) === String(id));
+    if (!e) return;
+    if (e.payType === 'daily') {
+        Modal.open(`ثبت کارکرد — ${e.name}`, `
+            <p style="font-size:13px;color:#475569">مزد یک روز: ${formatMoney(e.dailyWage)}</p>
+            <div class="form-group"><label>تعداد روز</label><input type="number" id="enDays" class="form-control" value="1" min="0" step="any" oninput="calcEmployeeEntry()"></div>
+            <div class="form-group"><label>مزد روز (قابل تغییر)</label><input type="number" id="enRate" class="form-control" value="${e.dailyWage}" oninput="calcEmployeeEntry()"></div>
+            <div class="form-group"><label>تاریخ (شمسی)</label><input type="text" id="enDate" class="form-control" value="${todayJalali()}"></div>
+            <div class="form-group"><label>یادداشت</label><input type="text" id="enNote" class="form-control" placeholder="مثلاً کار در پروژه مکتب"></div>
+            <div class="invoice-total">مبلغ قابل پرداخت: <span id="enCalc">0</span> افغانی</div>
+        `, `<button class="btn btn-primary" onclick="saveEmployeeEarning(${id})">ثبت</button>`);
+        calcEmployeeEntry();
+        return;
+    }
+    if (e.payType === 'percent') {
+        const projects = DB.getProjects();
+        const repairs = DB.getRepairs();
+        employeeShareTargets = {
+            // Base excludes goods sold on the project / repair — only the work counts
+            project: projects.map(p => ({ id: p.id, label: `${p.name} - ${p.client || ''}`, base: DB.percentBase('project', p), goods: Number(p.goodsTotal) || 0 })),
+            repair: repairs.map(r => ({ id: r.id, label: `#${r.id} ${r.device || ''} - ${r.customer || ''}`, base: DB.percentBase('repair', r), goods: Number(r.goodsTotal) || 0 }))
+        };
+        Modal.open(`ثبت سهم فیصدی — ${e.name}`, `
+            <div class="form-group"><label>سهم از</label>
+                <select id="enRefType" class="form-control" onchange="onEmployeeShareTypeChange()">
+                    <option value="project">پروژه</option>
+                    <option value="repair">ترمیم</option>
+                </select>
+            </div>
+            <div class="form-group"><label id="enRefLabel">انتخاب پروژه</label>
+                <select id="enRefId" class="form-control" onchange="calcEmployeeEntry()"></select>
+            </div>
+            <div class="form-group"><label>فیصدی (٪)</label><input type="number" id="enRate" class="form-control" step="any" value="${e.percentRate || 0}" oninput="calcEmployeeEntry()"></div>
+            <div class="form-group"><label>تاریخ (شمسی)</label><input type="text" id="enDate" class="form-control" value="${todayJalali()}"></div>
+            <div id="enBaseInfo" style="font-size:12px; color:#475569; margin-bottom:8px;"></div>
+            <div class="invoice-total">مبلغ سهم: <span id="enCalc">0</span> افغانی</div>
+            <small style="color:#64748b">مبنای فیصدی فقط مبلغ کار است؛ جنس فروخته‌شده برای پروژه یا ترمیم در آن حساب نمی‌شود. اگر مبلغ کار بعداً تغییر کند، سهم خودکار دوباره حساب می‌شود.</small>
+        `, `<button class="btn btn-primary" onclick="saveEmployeeEarning(${id})">ثبت</button>`);
+        onEmployeeShareTypeChange();
+        return;
+    }
+    Modal.open(`ثبت حقوق ماه — ${e.name}`, `
+        <div class="form-group"><label>ماه</label><input type="text" id="enNote" class="form-control" placeholder="مثلاً سنبله 1404"></div>
+        <div class="form-group"><label>مبلغ حقوق (افغانی)</label><input type="number" id="enAmount" class="form-control" value="${e.salary}"></div>
+        <div class="form-group"><label>تاریخ (شمسی)</label><input type="text" id="enDate" class="form-control" value="${todayJalali()}"></div>
+    `, `<button class="btn btn-primary" onclick="saveEmployeeEarning(${id})">ثبت</button>`);
+}
+
+let employeeShareTargets = { project: [], repair: [] };
+
+function onEmployeeShareTypeChange() {
+    const type = $('enRefType').value;
+    const list = employeeShareTargets[type] || [];
+    $('enRefLabel').textContent = type === 'project' ? 'انتخاب پروژه' : 'انتخاب ترمیم';
+    $('enRefId').innerHTML = list.length
+        ? list.map(o => `<option value="${escAttr(String(o.id))}">${o.label} — مبنای کار: ${formatMoney(o.base)}</option>`).join('')
+        : '<option value="">موردی ثبت نشده</option>';
+    calcEmployeeEntry();
+}
+
+function calcEmployeeEntry() {
+    const out = $('enCalc');
+    if (!out) return;
+    let amount = 0;
+    if ($('enRefType')) {
+        const type = $('enRefType').value;
+        const target = (employeeShareTargets[type] || []).find(o => String(o.id) === String($('enRefId').value));
+        const rate = Number($('enRate').value) || 0;
+        amount = target ? Math.round((target.base * rate) / 100) : 0;
+        const info = $('enBaseInfo');
+        if (info) {
+            info.innerHTML = target
+                ? `مبنای محاسبه (مبلغ کار): <b>${formatMoney(target.base)}</b> افغانی` +
+                  (target.goods > 0 ? ` — جنس فروخته‌شده ${formatMoney(target.goods)} افغانی در فیصدی حساب نمی‌شود` : '')
+                : '';
+        }
+    } else {
+        amount = Math.round((Number($('enDays').value) || 0) * (Number($('enRate').value) || 0));
+    }
+    out.textContent = amount.toLocaleString('fa-AF');
+}
+
+function saveEmployeeEarning(id) {
+    const e = DB.getEmployees().find(x => String(x.id) === String(id));
+    if (!e) return;
+    const date = $('enDate') ? $('enDate').value : todayJalali();
+    if (e.payType === 'daily') {
+        const days = Number($('enDays').value) || 0;
+        const rate = Number($('enRate').value) || 0;
+        if (days <= 0 || rate <= 0) return alert('تعداد روز و مزد روز را درست وارد کنید');
+        DB.addEmployeeEntry(id, { kind: 'daily', date, days, rate, note: $('enNote').value || '' });
+    } else if (e.payType === 'percent') {
+        const refType = $('enRefType').value;
+        const refId = $('enRefId').value;
+        const rate = Number($('enRate').value) || 0;
+        if (!refId) return alert('پروژه یا ترمیم را انتخاب کنید');
+        if (rate <= 0) return alert('فیصدی را وارد کنید');
+        DB.addEmployeeEntry(id, { kind: 'percent', date, refType, refId, rate });
+    } else {
+        const amount = Number($('enAmount').value) || 0;
+        if (amount <= 0) return alert('مبلغ را وارد کنید');
+        DB.addEmployeeEntry(id, { kind: 'monthly', date, amount, note: $('enNote').value || '' });
+    }
+    Modal.close();
+    loadEmployees();
+    loadDashboard();
+}
+
+function employeeEntryText(en) {
+    if (en.kind === 'daily') return `کارکرد ${formatQty(en.days)} روز × ${formatMoney(en.rate)}${en.note ? ' — ' + en.note : ''}`;
+    if (en.kind === 'percent') {
+        const label = en.refType === 'project'
+            ? (DB.getProjects().find(p => String(p.id) === String(en.refId)) || {}).name || ('#' + en.refId)
+            : 'ترمیم #' + en.refId;
+        return `${en.rate}٪ از ${en.refType === 'project' ? 'پروژه ' + label : label} (مبنای کار: ${formatMoney(en.base || 0)})`;
+    }
+    return `حقوق ماه${en.note ? ' — ' + en.note : ''}`;
+}
+
+function viewEmployee(id) {
+    const e = DB.getEmployees().find(x => String(x.id) === String(id));
+    if (!e) return;
+    const entryRows = (e.entries || []).slice().reverse().map(en => `
+        <tr>
+            <td style="padding:4px 8px; border:1px solid #cbd5e1; font-size:12px;">${toPersianDate(en.date)}</td>
+            <td style="padding:4px 8px; border:1px solid #cbd5e1; font-size:12px;">${employeeEntryText(en)}</td>
+            <td style="padding:4px 8px; border:1px solid #cbd5e1; font-size:12px; text-align:left; direction:ltr;">${formatMoney(en.amount)}</td>
+            <td class="no-print" style="padding:4px 8px; border:1px solid #cbd5e1; text-align:center;"><button class="btn btn-sm btn-danger no-print" onclick="removeEmployeeEntry(${e.id}, ${en.id})">🗑️</button></td>
+        </tr>
+    `).join('') || '<tr><td colspan="4" style="text-align:center; padding:8px; font-size:12px; color:#666;">موردی ثبت نشده</td></tr>';
+
+    const payRows = DB.getTransactions()
+        .filter(t => t.refType === 'employee' && String(t.refId) === String(id))
+        .reverse()
+        .map(t => `
+        <tr>
+            <td style="padding:4px 8px; border:1px solid #cbd5e1; font-size:12px;">${toPersianDate(t.date)}</td>
+            <td style="padding:4px 8px; border:1px solid #cbd5e1; font-size:12px;">${t.description}</td>
+            <td style="padding:4px 8px; border:1px solid #cbd5e1; font-size:12px; text-align:left; direction:ltr;">${formatMoney(t.amount)}</td>
+        </tr>
+    `).join('') || '<tr><td colspan="3" style="text-align:center; padding:8px; font-size:12px; color:#666;">پرداختی ثبت نشده</td></tr>';
+
+    Modal.open(`حساب ${e.name}`, `
+        <div class="print-section" style="font-family: Vazirmatn, Tahoma, sans-serif; font-size:13px; color:#1e293b;">
+            <table style="width:100%; border-collapse:collapse; margin-bottom:12px;">
+                <tr>
+                    <td style="padding:5px 8px; border:1px solid #cbd5e1; background:#f8fafc; font-weight:600; width:25%;">نقش</td>
+                    <td style="padding:5px 8px; border:1px solid #cbd5e1; width:25%;">${e.role}</td>
+                    <td style="padding:5px 8px; border:1px solid #cbd5e1; background:#f8fafc; font-weight:600; width:25%;">نوع مزد</td>
+                    <td style="padding:5px 8px; border:1px solid #cbd5e1; width:25%;">${PAY_TYPE_LABEL[e.payType]} (${payBaseText(e)})</td>
+                </tr>
+                <tr>
+                    <td style="padding:5px 8px; border:1px solid #cbd5e1; background:#f0fdfa; font-weight:600; color:#0f766e;">مجموع استحقاق</td>
+                    <td style="padding:5px 8px; border:1px solid #cbd5e1; font-weight:700;">${formatMoney(e.earned || 0)}</td>
+                    <td style="padding:5px 8px; border:1px solid #cbd5e1; background:#f0fdf4; font-weight:600; color:#047857;">پرداخت‌شده / باقی</td>
+                    <td style="padding:5px 8px; border:1px solid #cbd5e1; font-weight:700;">${formatMoney(e.paid)} / <span style="color:#b91c1c">${formatMoney(e.debt)}</span></td>
+                </tr>
+            </table>
+
+            <div style="font-size:14px; font-weight:700; color:#0f766e; border-bottom:1px solid #cbd5e1; padding-bottom:4px; margin-bottom:6px;">موارد استحقاق (حقوق / کارکرد / سهم)</div>
+            <table style="width:100%; border-collapse:collapse; margin-bottom:12px;">
+                <thead><tr style="background:#f1f5f9;">
+                    <th style="padding:5px 8px; border:1px solid #cbd5e1; font-size:12px; text-align:right; width:20%;">تاریخ</th>
+                    <th style="padding:5px 8px; border:1px solid #cbd5e1; font-size:12px; text-align:right;">شرح</th>
+                    <th style="padding:5px 8px; border:1px solid #cbd5e1; font-size:12px; text-align:left; direction:ltr; width:22%;">مبلغ</th>
+                    <th class="no-print" style="padding:5px 8px; border:1px solid #cbd5e1; font-size:12px; text-align:center; width:10%;">حذف</th>
+                </tr></thead>
+                <tbody>${entryRows}</tbody>
+            </table>
+
+            <div style="font-size:14px; font-weight:700; color:#0f766e; border-bottom:1px solid #cbd5e1; padding-bottom:4px; margin-bottom:6px;">پرداخت‌ها</div>
+            <table style="width:100%; border-collapse:collapse;">
+                <thead><tr style="background:#f1f5f9;">
+                    <th style="padding:5px 8px; border:1px solid #cbd5e1; font-size:12px; text-align:right; width:20%;">تاریخ</th>
+                    <th style="padding:5px 8px; border:1px solid #cbd5e1; font-size:12px; text-align:right;">شرح</th>
+                    <th style="padding:5px 8px; border:1px solid #cbd5e1; font-size:12px; text-align:left; direction:ltr; width:22%;">مبلغ</th>
+                </tr></thead>
+                <tbody>${payRows}</tbody>
+            </table>
+        </div>
+    `, `<button class="btn btn-primary no-print" onclick="window.print()">🖨️ پرینت</button>`);
+}
+
+function removeEmployeeEntry(empId, entryId) {
+    if (!confirm('این مورد حذف شود؟ از مجموع استحقاق کم می‌شود.')) return;
+    DB.deleteEmployeeEntry(empId, entryId);
+    loadEmployees();
+    loadDashboard();
+    Modal.close();
+    viewEmployee(empId);
+}
+
 function payEmployee(id) {
-    const emp = DB.getEmployees().find(x => x.id === id);
+    const emp = DB.getEmployees().find(x => String(x.id) === String(id));
+    if (!emp) return;
     Modal.open('پرداخت به ' + emp.name, `
-        <p>حقوق ماهانه: ${formatMoney(emp.salary)}</p>
+        <p>نوع مزد: ${PAY_TYPE_LABEL[emp.payType]} (${payBaseText(emp)})</p>
+        <p>مجموع استحقاق: ${formatMoney(emp.earned || 0)}</p>
         <p>پرداخت‌شده تاکنون: ${formatMoney(emp.paid)}</p>
-        <p>بدهکاری: ${formatMoney(emp.debt)}</p>
-        <div class="form-group"><label>مبلغ پرداخت (افغانی)</label><input type="number" id="payAmt" class="form-control"></div>
+        <p>باقی (بدهکاری): ${formatMoney(emp.debt)}</p>
+        <div class="form-group"><label>مبلغ پرداخت (افغانی)</label><input type="number" id="payAmt" class="form-control" value="${emp.debt || 0}"></div>
         <div class="form-group"><label>تاریخ (شمسی)</label><input type="text" id="payDate" class="form-control" placeholder="1403-05-01" value="${todayJalali()}"></div>
     `, `<button class="btn btn-success" onclick="saveEmployeePayment(${id})">ثبت پرداخت</button>`);
 }
 
 function saveEmployeePayment(id) {
     const amount = Number($('payAmt').value) || 0;
-    if (amount <= 0) return;
-    const emp = DB.getEmployees().find(x => x.id === id);
-    const newPaid = emp.paid + amount;
-    const newDebt = emp.salary - newPaid;
-    DB.updateEmployee(id, { paid: newPaid, debt: newDebt > 0 ? newDebt : 0 });
+    if (amount <= 0) return alert('مبلغ نامعتبر');
+    const emp = DB.getEmployees().find(x => String(x.id) === String(id));
+    if (!emp) return;
+    const newPaid = (Number(emp.paid) || 0) + amount;
+    DB.updateEmployee(id, { paid: newPaid, debt: Math.max(0, (emp.earned || 0) - newPaid) });
     DB.addTransaction({
         type: 'expense',
         description: `پرداخت به ${emp.name} (${emp.role})`,
@@ -1000,6 +1515,7 @@ function saveEmployeePayment(id) {
     Modal.close();
     loadEmployees();
     loadFinance();
+    loadDashboard();
 }
 
 function deleteEmployee(id) {
@@ -1700,7 +2216,7 @@ function renderSalesReport(content, summary) {
     const sales = filterByDate(DB.getSales(), 'date');
     const totalSales = sales.reduce((s, x) => s + (x.total || 0), 0);
     const totalPaid = sales.reduce((s, x) => s + (x.paid || 0), 0);
-    const totalDebt = sales.reduce((s, x) => s + (x.debt || 0), 0);
+    const totalDebt = sales.reduce((s, x) => s + (x.linkType ? (x.linkedRemaining || 0) : (x.debt || 0)), 0);
     const totalDiscount = sales.reduce((s, x) => s + (x.discount || 0), 0);
     const count = sales.length;
 
@@ -1719,6 +2235,7 @@ function renderSalesReport(content, summary) {
                         <tr>
                             <th>#</th>
                             <th>مشتری</th>
+                            <th>مربوط به</th>
                             <th>تاریخ</th>
                             <th>جمع فرعی</th>
                             <th>تخفیف</th>
@@ -1732,19 +2249,20 @@ function renderSalesReport(content, summary) {
                             <tr>
                                 <td>#${s.id}</td>
                                 <td>${s.customer}</td>
+                                <td>${saleLinkText(s)}</td>
                                 <td>${toPersianDate(s.date)}</td>
                                 <td>${formatMoney(s.subtotal)}</td>
                                 <td>${formatMoney(s.discount)}</td>
                                 <td><strong>${formatMoney(s.total)}</strong></td>
                                 <td>${formatMoney(s.paid)}</td>
-                                <td><span class="badge badge-${s.debt > 0 ? 'danger' : 'success'}">${formatMoney(s.debt)}</span></td>
+                                <td><span class="badge badge-${(s.linkType ? (s.linkedRemaining || 0) : s.debt) > 0 ? 'danger' : 'success'}">${formatMoney(s.linkType ? (s.linkedRemaining || 0) : s.debt)}</span></td>
                             </tr>
-                        `).join('') : '<tr><td colspan="8" class="report-empty"><div class="empty-icon">📭</div>فروشی در این بازه ثبت نشده</td></tr>'}
+                        `).join('') : '<tr><td colspan="9" class="report-empty"><div class="empty-icon">📭</div>فروشی در این بازه ثبت نشده</td></tr>'}
                     </tbody>
                     ${sales.length ? `
                     <tfoot>
                         <tr>
-                            <td colspan="3">جمع کل (${count} فاکتور)</td>
+                            <td colspan="4">جمع کل (${count} فاکتور)</td>
                             <td>${formatMoney(sales.reduce((s,x) => s + (x.subtotal||0), 0))}</td>
                             <td>${formatMoney(totalDiscount)}</td>
                             <td>${formatMoney(totalSales)}</td>
@@ -2466,6 +2984,26 @@ function xlPick(row, aliases) {
 }
 
 function xlText(row, aliases) { return String(xlPick(row, aliases)).trim(); }
+
+// Turns an Excel «مربوط به» cell back into a project / repair link.
+function xlParseSaleLink(text) {
+    const none = { linkType: '', linkId: null };
+    const value = String(text || '').trim();
+    if (!value || value === 'فروش عادی') return none;
+    const body = value.replace(/^[^:]*:/, '').trim();
+    if (value.indexOf('پروژه') === 0) {
+        const name = body.split(' - ')[0].trim();
+        const project = DB.getProjects().find(p => String(p.name).trim() === name || String(p.id) === name);
+        return project ? { linkType: 'project', linkId: project.id } : none;
+    }
+    if (value.indexOf('ترمیم') === 0 || value.indexOf('تعمیر') === 0) {
+        const num = (body.match(/\d+/) || [])[0];
+        if (!num) return none;
+        const repair = DB.getRepairs().find(r => String(r.id) === String(num));
+        return repair ? { linkType: 'repair', linkId: repair.id } : none;
+    }
+    return none;
+}
 function xlNumber(row, aliases) { return xlNum(xlPick(row, aliases)); }
 
 // Group flattened rows (one row per item) back into invoices.
@@ -2561,7 +3099,7 @@ const SECTION_COLUMNS = {
     },
     sales: {
         // یک ردیف برای هر کالای فروشته‌شده
-        headers: ['شماره فاکتور', 'تاریخ', 'مشتری', 'شماره تماس', 'نام جنس', 'مقدار', 'واحد', 'قیمت فی', 'مبلغ قلم', 'جمع اقلام', 'تخفیف', 'مبلغ نهایی', 'پرداخت‌شده', 'بدهی'],
+        headers: ['شماره فاکتور', 'تاریخ', 'مشتری', 'شماره تماس', 'مربوط به', 'نام جنس', 'مقدار', 'واحد', 'قیمت فی', 'مبلغ قلم', 'جمع اقلام', 'تخفیف', 'مبلغ نهایی', 'پرداخت‌شده', 'بدهی'],
         keys: null,
         getRows: () => {
             const rows = [];
@@ -2576,6 +3114,7 @@ const SECTION_COLUMNS = {
                         'تاریخ': s.date || '',
                         'مشتری': s.customer || '',
                         'شماره تماس': s.phone || '',
+                        'مربوط به': first ? saleLinkText(s) : '',
                         'نام جنس': i.name || '',
                         'مقدار': qty,
                         'واحد': normalizeUnit(i.unit),
@@ -2585,7 +3124,7 @@ const SECTION_COLUMNS = {
                         'تخفیف': first ? (Number(s.discount) || 0) : '',
                         'مبلغ نهایی': first ? (Number(s.total) || 0) : '',
                         'پرداخت‌شده': first ? (Number(s.paid) || 0) : '',
-                        'بدهی': first ? (Number(s.debt) || 0) : ''
+                        'بدهی': first ? (Number(s.linkType ? (s.linkedRemaining || 0) : s.debt) || 0) : ''
                     });
                 });
             });
@@ -2626,6 +3165,8 @@ const SECTION_COLUMNS = {
                 if (paid < 0) paid = 0;
                 debt = total - paid;
                 if (debt < 0) debt = 0;
+                // Optional «مربوط به» column: "پروژه: <نام>" or "ترمیم: #<شماره>"
+                const link = xlParseSaleLink(xlText(h, ['مربوط به', 'نوع فروش']));
                 DB.addSale({
                     date: xlText(h, ['تاریخ']) || todayJalali(),
                     customer: xlText(h, ['مشتری', 'نام مشتری']) || 'مشتری نقدی',
@@ -2635,13 +3176,15 @@ const SECTION_COLUMNS = {
                     discount: discount,
                     total: total,
                     paid: paid,
-                    debt: debt
+                    debt: debt,
+                    linkType: link.linkType,
+                    linkId: link.linkId
                 });
                 count++;
             });
             return count;
         },
-        reload: () => { loadSales(); loadInventory(); loadFinance(); }
+        reload: () => { loadSales(); loadInventory(); loadFinance(); loadProjects(); loadRepairs(); }
     },
     repairs: {
         headers: ['شماره', 'تاریخ دریافت', 'مشتری', 'دستگاه', 'مشکل', 'وضعیت', 'هزینه', 'پرداخت‌شده', 'باقی‌مانده', 'شماره تماس'],
@@ -2658,10 +3201,22 @@ const SECTION_COLUMNS = {
         reload: loadProjects
     },
     employees: {
-        headers: ['شماره', 'نام', 'نقش', 'شماره تماس', 'حقوق/سهم ماهانه', 'پرداخت‌شده', 'بدهکاری'],
-        keys: ['id', 'name', 'role', 'phone', 'salary', 'paid', 'debt'],
-        getData: () => DB.getEmployees(),
-        addRow: (row) => DB.addEmployee({ name: row['نام'] || '', role: row['نقش'] || 'کارمند', phone: row['شماره تماس'] || '', salary: Number(row['حقوق/سهم ماهانه']) || 0 }),
+        headers: ['شماره', 'نام', 'نقش', 'نوع مزد', 'شماره تماس', 'حقوق ماهانه', 'مزد روز', 'فیصدی', 'مجموع استحقاق', 'پرداخت‌شده', 'بدهکاری'],
+        keys: ['id', 'name', 'role', '_payTypeText', 'phone', 'salary', 'dailyWage', 'percentRate', 'earned', 'paid', 'debt'],
+        getData: () => DB.getEmployees().map(e => ({ ...e, _payTypeText: PAY_TYPE_LABEL[e.payType] || 'ماهانه' })),
+        addRow: (row) => {
+            const payText = String(row['نوع مزد'] || '').trim();
+            const payType = payText === 'روزمزد' ? 'daily' : payText === 'فیصدی' ? 'percent' : 'monthly';
+            return DB.addEmployee({
+                name: row['نام'] || '',
+                role: row['نقش'] || 'کارمند',
+                phone: row['شماره تماس'] || '',
+                payType: payType,
+                salary: Number(row['حقوق ماهانه'] || row['حقوق/سهم ماهانه']) || 0,
+                dailyWage: Number(row['مزد روز']) || 0,
+                percentRate: Number(row['فیصدی']) || 0
+            });
+        },
         reload: loadEmployees
     },
     debtors: {
@@ -2707,7 +3262,7 @@ function exportSectionExcel(section) {
             const key = cfg.keys[i];
             let val = item[key];
             // Format money fields for readability
-            if (['buyPrice','sellPrice','unitPrice','total','paid','remaining','cost','amount','salary','debt','totalDebt','subtotal','discount'].includes(key) && val !== undefined && val !== null) {
+            if (['buyPrice','sellPrice','unitPrice','total','paid','remaining','cost','amount','salary','dailyWage','earned','debt','totalDebt','subtotal','discount'].includes(key) && val !== undefined && val !== null) {
                 val = Number(val);
             }
             row[h] = val !== undefined && val !== null ? val : '';

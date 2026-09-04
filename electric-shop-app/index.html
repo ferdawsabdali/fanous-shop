@@ -7,12 +7,12 @@
     <meta http-equiv="Pragma" content="no-cache">
     <meta http-equiv="Expires" content="0">
     <title>لوازم برق و صنعت فانوس</title>
-    <link rel="stylesheet" href="assets/css/style.css?v=16">
+    <link rel="stylesheet" href="assets/css/style.css?v=21">
     <link href="https://cdn.jsdelivr.net/gh/rastikerdar/vazirmatn@v33.003/Vazirmatn-font-face.css" rel="stylesheet">
     <script>
     /* Cache-bust: force reload if cached version is old */
     (function(){
-        var V=16;
+        var V=21;
         try{
             var s=localStorage.getItem('_fanous_v');
             if(s && parseInt(s)<V){
@@ -68,6 +68,14 @@
                 <a href="#" class="nav-link" data-page="sales">
                     <span class="nav-icon">🛒</span>
                     <span>فروش و فاکتور</span>
+                </a>
+                <a href="#" class="nav-link nav-shortcut" data-shortcut="transaction">
+                    <span class="nav-icon">🧾</span>
+                    <span>ثبت تراکنش</span>
+                </a>
+                <a href="#" class="nav-link nav-shortcut" data-shortcut="purchase">
+                    <span class="nav-icon">🛍️</span>
+                    <span>خریداری جدید</span>
                 </a>
                 <a href="#" class="nav-link" data-page="repairs">
                     <span class="nav-icon">🔧</span>
@@ -300,6 +308,7 @@
                                     <tr>
                                         <th>شماره فاکتور</th>
                                         <th>مشتری</th>
+                                        <th>مربوط به</th>
                                         <th>تاریخ</th>
                                         <th>مبلغ کل</th>
                                         <th>تخفیف</th>
@@ -395,10 +404,12 @@
                                         <th>کد</th>
                                         <th>نام</th>
                                         <th>نقش</th>
+                                        <th>نوع مزد</th>
                                         <th>شماره تماس</th>
-                                        <th>حقوق/سهم</th>
-                                        <th>پرداختی این ماه</th>
-                                        <th>بدهکاری</th>
+                                        <th>مبنای محاسبه</th>
+                                        <th>مجموع استحقاق</th>
+                                        <th>پرداخت‌شده</th>
+                                        <th>باقی (بدهکاری)</th>
                                         <th>عملیات</th>
                                     </tr>
                                 </thead>
@@ -782,8 +793,8 @@
     </div>
 
     <script src="https://cdn.sheetjs.com/xlsx-0.20.3/package/dist/xlsx.full.min.js"></script>
-    <script src="assets/js/db.js?v=16"></script>
-    <script src="assets/js/cloud.js?v=16"></script>
-    <script src="assets/js/app.js?v=16"></script>
+    <script src="assets/js/db.js?v=21"></script>
+    <script src="assets/js/cloud.js?v=21"></script>
+    <script src="assets/js/app.js?v=21"></script>
 </body>
 </html>
