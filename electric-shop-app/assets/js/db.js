@@ -49,17 +49,13 @@ const DB = {
                 sales: [],
                 repairs: [],
                 projects: [],
-                employees: [
-                    { id: 2, name: 'کارگر ۱', role: 'کارگر', phone: '', payType: 'daily', salary: 0, dailyWage: 400, percentRate: 0, entries: [], paid: 0, debt: 0 },
-                ],
-                partners: [
-                    { id: 1, name: 'شریک تجاری', phone: '', sharePercent: 100, withdrawals: [] },
-                ],
+                employees: [],
+                partners: [],
                 transactions: [],
                 debtors: [],
                 purchases: [],
                 assets: [],
-                nextIds: { product: 1, sale: 1, repair: 1, project: 1, employee: 3, transaction: 1, debtor: 1, purchase: 1, asset: 1, partner: 2 }
+                nextIds: { product: 1, sale: 1, repair: 1, project: 1, employee: 1, transaction: 1, debtor: 1, purchase: 1, asset: 1, partner: 1 }
             };
             this.save(defaultData);
         }
@@ -1237,10 +1233,25 @@ const DB = {
     clearAll() {
         localStorage.removeItem(this.key);
         this.init();
+    },
+    /* One-time wipe: when the reset tag stored in the data differs from the
+       given tag, all local data is cleared once and the app starts empty.
+       After that the tag is saved so it never wipes again. */
+    resetOnce(tag) {
+        const raw = localStorage.getItem(this.key);
+        let stored = null;
+        try { stored = raw ? JSON.parse(raw).resetTag : null; } catch (e) { stored = null; }
+        if (stored === tag) return;
+        localStorage.removeItem(this.key);
+        this.init();
+        const d = this.getAll();
+        d.resetTag = tag;
+        this.save(d);
     }
 };
 
 DB.init();
+DB.resetOnce('2026-09-22-empty');
 DB.normalizeProductIds();
 DB.migrateGoodsTotals();
 DB.migratePartners();
