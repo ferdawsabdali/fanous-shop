@@ -50,14 +50,16 @@ const DB = {
                 repairs: [],
                 projects: [],
                 employees: [
-                    { id: 1, name: 'شریک تجاری', role: 'شریک', phone: '', payType: 'monthly', salary: 0, dailyWage: 0, percentRate: 0, entries: [], paid: 0, debt: 0 },
                     { id: 2, name: 'کارگر ۱', role: 'کارگر', phone: '', payType: 'daily', salary: 0, dailyWage: 400, percentRate: 0, entries: [], paid: 0, debt: 0 },
+                ],
+                partners: [
+                    { id: 1, name: 'شریک تجاری', phone: '', sharePercent: 100, withdrawals: [] },
                 ],
                 transactions: [],
                 debtors: [],
                 purchases: [],
                 assets: [],
-                nextIds: { product: 1, sale: 1, repair: 1, project: 1, employee: 3, transaction: 1, debtor: 1, purchase: 1, asset: 1 }
+                nextIds: { product: 1, sale: 1, repair: 1, project: 1, employee: 3, transaction: 1, debtor: 1, purchase: 1, asset: 1, partner: 2 }
             };
             this.save(defaultData);
         }
@@ -75,6 +77,8 @@ const DB = {
         if (!data.assets) data.assets = [];
         if (typeof data.initialCapital !== 'number') data.initialCapital = 0;
         if (typeof data.marketDebt !== 'number') data.marketDebt = 0;
+        if (!Array.isArray(data.partners)) data.partners = [];
+        if (!data.nextIds.partner) data.nextIds.partner = 1;
         return data;
     },
     
@@ -740,6 +744,117 @@ const DB = {
         data.transactions = data.transactions.filter(t => !(t.refType === 'employee' && t.refId === id));
         this.save(data);
     },
+
+    // ================= Partners (شرکا) =================
+    /* A partner is NOT an employee: they share the whole company's profit or
+       loss in proportion to their partnership percentage. Their "withdrawals"
+       (برداشت) are the cash they have taken out; they are stored on the
+       partner record only and are NOT company income/expense, so they never
+       change the profit that is being distributed. */
+    /* One-time: move any old employee whose role was 'شریک' into partners. */
+    migratePartners() {
+        const data = this.getAll();
+        if (data.partnersMigrated) return;
+        if (!Array.isArray(data.partners)) data.partners = [];
+        const movers = (data.employees || []).filter(e => e.role === 'شریک');
+        movers.forEach(e => {
+            const withdrawals = [];
+            const paid = Number(e.paid) || 0;
+            if (paid > 0) withdrawals.push({ id: 1, date: e.lastPayDate || todayJalali(), amount: paid, note: 'برداشت ثبت‌شده قبلی' });
+            data.partners.push({
+                id: this.getNextId('partner', data),
+                name: e.name,
+                phone: e.phone || '',
+                sharePercent: Number(e.percentRate) || 0,
+                withdrawals
+            });
+        });
+        if (movers.length) {
+            const ids = movers.map(m => m.id);
+            data.employees = data.employees.filter(e => e.role !== 'شریک');
+            // Old salary transactions of those partners were company expense; keep
+            // them as they were real cash movements, but relabel refType so they
+            // no longer point at a deleted employee record.
+            data.transactions.forEach(t => {
+                if (t.refType === 'employee' && ids.includes(t.refId)) t.refType = 'partner_legacy';
+            });
+        }
+        data.partnersMigrated = true;
+        this.save(data);
+    },
+    /* Whole-company accounting profit: all income minus all expenses.
+       Partner withdrawals are not transactions, so they are naturally excluded. */
+    companyNetProfit(data) {
+        const d = data || this.getAll();
+        let income = 0, expense = 0;
+        (d.transactions || []).forEach(t => {
+            const amt = Number(t.amount) || 0;
+            if (t.type === 'income') income += amt;
+            else if (t.type === 'expense') expense += amt;
+        });
+        return { income, expense, net: income - expense };
+    },
+    getPartners() {
+        const data = this.getAll();
+        const { net } = this.companyNetProfit(data);
+        (data.partners || []).forEach(p => {
+            p.sharePercent = Number(p.sharePercent) || 0;
+            if (!Array.isArray(p.withdrawals)) p.withdrawals = [];
+            p.share = Math.round(net * p.sharePercent / 100);
+            p.withdrawn = p.withdrawals.reduce((s, w) => s + (Number(w.amount) || 0), 0);
+            // balance > 0 : company owes the partner (undrawn profit)
+            // balance < 0 : partner has taken more than their share (or in loss)
+            p.balance = p.share - p.withdrawn;
+        });
+        return data.partners;
+    },
+    totalPartnerPercent() {
+        return (this.getAll().partners || []).reduce((s, p) => s + (Number(p.sharePercent) || 0), 0);
+    },
+    addPartner(partner) {
+        const data = this.getAll();
+        partner.id = this.getNextId('partner', data);
+        partner.sharePercent = Number(partner.sharePercent) || 0;
+        partner.phone = partner.phone || '';
+        partner.withdrawals = [];
+        data.partners.push(partner);
+        this.save(data);
+        return partner;
+    },
+    updatePartner(id, updated) {
+        const data = this.getAll();
+        const idx = data.partners.findIndex(p => String(p.id) === String(id));
+        if (idx > -1) {
+            data.partners[idx] = { ...data.partners[idx], ...updated };
+            this.save(data);
+        }
+    },
+    deletePartner(id) {
+        const data = this.getAll();
+        data.partners = data.partners.filter(p => String(p.id) !== String(id));
+        this.save(data);
+    },
+    addPartnerWithdrawal(partnerId, w) {
+        const data = this.getAll();
+        const p = data.partners.find(x => String(x.id) === String(partnerId));
+        if (!p) return null;
+        if (!Array.isArray(p.withdrawals)) p.withdrawals = [];
+        const maxId = p.withdrawals.reduce((m, x) => Math.max(m, Number(x.id) || 0), 0);
+        w.id = maxId + 1;
+        w.date = w.date || todayJalali();
+        w.amount = Number(w.amount) || 0;
+        p.withdrawals.push(w);
+        this.save(data);
+        return w;
+    },
+    deletePartnerWithdrawal(partnerId, wId) {
+        const data = this.getAll();
+        const p = data.partners.find(x => String(x.id) === String(partnerId));
+        if (!p || !Array.isArray(p.withdrawals)) return false;
+        p.withdrawals = p.withdrawals.filter(w => String(w.id) !== String(wId));
+        this.save(data);
+        return true;
+    },
     
     // Transactions
     getTransactions() { return this.getAll().transactions; },
@@ -1128,5 +1243,6 @@ const DB = {
 DB.init();
 DB.normalizeProductIds();
 DB.migrateGoodsTotals();
+DB.migratePartners();
 // 🔔 Notify CloudSync that DB is ready
 window.dispatchEvent(new Event('db-ready'));

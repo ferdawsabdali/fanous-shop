@@ -7,12 +7,12 @@
     <meta http-equiv="Pragma" content="no-cache">
     <meta http-equiv="Expires" content="0">
     <title>لوازم برق و صنعت فانوس</title>
-    <link rel="stylesheet" href="assets/css/style.css?v=21">
+    <link rel="stylesheet" href="assets/css/style.css?v=22">
     <link href="https://cdn.jsdelivr.net/gh/rastikerdar/vazirmatn@v33.003/Vazirmatn-font-face.css" rel="stylesheet">
     <script>
     /* Cache-bust: force reload if cached version is old */
     (function(){
-        var V=21;
+        var V=22;
         try{
             var s=localStorage.getItem('_fanous_v');
             if(s && parseInt(s)<V){
@@ -107,7 +107,8 @@
                         <span class="nav-chevron">▼</span>
                     </a>
                     <div class="nav-submenu">
-                        <a href="#" class="nav-link" data-page="employees">👷 کارمندان و شریک</a>
+                        <a href="#" class="nav-link" data-page="employees">👷 کارمندان و کارگران</a>
+                        <a href="#" class="nav-link" data-page="partners">🤝 شرکا</a>
                     </div>
                 </div>
 
@@ -414,6 +415,34 @@
                                     </tr>
                                 </thead>
                                 <tbody id="employeesTable"></tbody>
+                            </table>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Partners Page -->
+                <div class="page" id="partners">
+                    <div class="page-actions">
+                        <button class="btn btn-primary" id="addPartnerBtn">+ افزودن شریک</button>
+                        <input type="text" class="search-input" id="searchPartner" placeholder="جستجوی شریک...">
+                    </div>
+                    <div class="stats-grid" id="partnerStats"></div>
+                    <div class="card">
+                        <div class="card-body">
+                            <table class="table">
+                                <thead>
+                                    <tr>
+                                        <th>کد</th>
+                                        <th>نام</th>
+                                        <th>فیصدی شراکت</th>
+                                        <th>شماره تماس</th>
+                                        <th>سهم از فایده/زیان</th>
+                                        <th>برداشت‌شده</th>
+                                        <th>باقی‌مانده</th>
+                                        <th>عملیات</th>
+                                    </tr>
+                                </thead>
+                                <tbody id="partnersTable"></tbody>
                             </table>
                         </div>
                     </div>
@@ -793,8 +822,8 @@
     </div>
 
     <script src="https://cdn.sheetjs.com/xlsx-0.20.3/package/dist/xlsx.full.min.js"></script>
-    <script src="assets/js/db.js?v=21"></script>
-    <script src="assets/js/cloud.js?v=21"></script>
-    <script src="assets/js/app.js?v=21"></script>
+    <script src="assets/js/db.js?v=22"></script>
+    <script src="assets/js/cloud.js?v=22"></script>
+    <script src="assets/js/app.js?v=22"></script>
 </body>
 </html>

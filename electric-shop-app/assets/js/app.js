@@ -82,7 +82,7 @@ $('modalClose').onclick = () => Modal.close();
 $('modal').onclick = e => { if (e.target === $('modal')) Modal.close(); };
 
 // Navigation
-const pages = ['dashboard', 'inventory', 'purchases', 'sales', 'repairs', 'projects', 'employees', 'finance', 'debtors', 'assets', 'reports', 'settings'];
+const pages = ['dashboard', 'inventory', 'purchases', 'sales', 'repairs', 'projects', 'employees', 'partners', 'finance', 'debtors', 'assets', 'reports', 'settings'];
 
 // Toggle submenu (accordion)
 document.querySelectorAll('.nav-toggle').forEach(toggle => {
@@ -149,6 +149,7 @@ function refreshPage(page) {
     if (page === 'repairs') loadRepairs();
     if (page === 'projects') loadProjects();
     if (page === 'employees') loadEmployees();
+    if (page === 'partners') loadPartners();
     if (page === 'finance') loadFinance();
     if (page === 'debtors') loadDebtors();
     if (page === 'reports') loadReports();
@@ -1209,7 +1210,7 @@ function onEmployeeRoleChange() {
     const role = $('eRole') ? $('eRole').value : '';
     const sel = $('ePayType');
     if (!sel) return;
-    if (role === 'کارمند' || role === 'شریک') {
+    if (role === 'کارمند') {
         sel.value = 'monthly';
     } else if (role === 'کارگر' && sel.value === 'monthly') {
         sel.value = 'daily';
@@ -1235,7 +1236,7 @@ function onEmployeePayTypeChange() {
 $('addEmployeeBtn').onclick = () => {
     Modal.open('افزودن شخص', `
         <div class="form-group"><label>نام</label><input type="text" id="eName" class="form-control"></div>
-        <div class="form-group"><label>نقش</label><select id="eRole" class="form-control" onchange="onEmployeeRoleChange()"><option>شریک</option><option>کارگر</option><option>کارمند</option><option>پیمانکار</option></select></div>
+        <div class="form-group"><label>نقش</label><select id="eRole" class="form-control" onchange="onEmployeeRoleChange()"><option>کارگر</option><option>کارمند</option><option>پیمانکار</option></select></div>
         <div class="form-group"><label>شماره تماس</label><input type="text" id="ePhone" class="form-control"></div>
         ${employeePayFields(null)}
     `, '<button class="btn btn-primary" onclick="saveEmployee()">ذخیره</button>');
@@ -1263,7 +1264,6 @@ function editEmployee(id) {
     Modal.open('ویرایش شخص', `
         <div class="form-group"><label>نام</label><input type="text" id="eName" class="form-control" value="${e.name}"></div>
         <div class="form-group"><label>نقش</label><select id="eRole" class="form-control" onchange="onEmployeeRoleChange()">
-            <option ${e.role === 'شریک' ? 'selected' : ''}>شریک</option>
             <option ${e.role === 'کارگر' ? 'selected' : ''}>کارگر</option>
             <option ${e.role === 'کارمند' ? 'selected' : ''}>کارمند</option>
             <option ${e.role === 'پیمانکار' ? 'selected' : ''}>پیمانکار</option>
@@ -1520,6 +1520,188 @@ function saveEmployeePayment(id) {
 
 function deleteEmployee(id) {
     if (confirm('حذف شود؟')) { DB.deleteEmployee(id); loadEmployees(); loadFinance(); }
+}
+
+// ==================== PARTNERS (شرکا) ====================
+/* Partners share the whole company's profit / loss by their partnership
+   percentage — they are NOT paid a wage. "برداشت" is cash a partner takes
+   out; it is tracked on the partner only and does not change company profit. */
+function loadPartners() {
+    renderPartners(DB.getPartners());
+}
+
+$('searchPartner').oninput = e => {
+    const q = e.target.value.toLowerCase();
+    const filtered = DB.getPartners().filter(p =>
+        p.name.toLowerCase().includes(q) || (p.phone || '').includes(q));
+    renderPartners(filtered);
+};
+
+function renderPartners(list) {
+    const np = DB.companyNetProfit();
+    const totalPct = DB.totalPartnerPercent();
+    const pctBadge = totalPct === 100
+        ? `<span class="badge badge-success">${totalPct}٪</span>`
+        : `<span class="badge badge-warning">${totalPct}٪</span>`;
+    $('partnerStats').innerHTML = `
+        <div class="stat-card ${np.net >= 0 ? 'green' : 'red'}">
+            <div class="stat-info">
+                <h3>${formatMoney(Math.abs(np.net))}</h3>
+                <p>${np.net >= 0 ? 'فایده خالص شرکت' : 'زیان خالص شرکت'}</p>
+            </div>
+            <div class="stat-icon">${np.net >= 0 ? '📈' : '📉'}</div>
+        </div>
+        <div class="stat-card blue">
+            <div class="stat-info"><h3>${formatMoney(np.income)}</h3><p>کل درآمد</p></div>
+            <div class="stat-icon">📥</div>
+        </div>
+        <div class="stat-card orange">
+            <div class="stat-info"><h3>${formatMoney(np.expense)}</h3><p>کل هزینه</p></div>
+            <div class="stat-icon">📤</div>
+        </div>
+        <div class="stat-card">
+            <div class="stat-info"><h3>${pctBadge}</h3><p>مجموع فیصدی شراکت</p></div>
+            <div class="stat-icon">🤝</div>
+        </div>`;
+
+    $('partnersTable').innerHTML = list.map(p => {
+        const isProfit = p.share >= 0;
+        const balLabel = p.balance >= 0 ? 'طلب شریک' : 'بدهی شریک';
+        return `
+        <tr>
+            <td>#${p.id}</td>
+            <td>${p.name}</td>
+            <td><span class="badge badge-info">${p.sharePercent}٪</span></td>
+            <td>${p.phone || '-'}</td>
+            <td><span style="color:${isProfit ? '#047857' : '#b91c1c'}">${formatMoney(p.share)}</span></td>
+            <td>${formatMoney(p.withdrawn)}</td>
+            <td><span class="badge badge-${p.balance >= 0 ? 'success' : 'danger'}" title="${balLabel}">${formatMoney(p.balance)}</span></td>
+            <td>
+                <button class="btn btn-sm btn-info" onclick="viewPartner(${p.id})">👁️</button>
+                <button class="btn btn-sm btn-success" onclick="partnerWithdrawModal(${p.id})">💸 برداشت</button>
+                <button class="btn btn-sm btn-primary" onclick="editPartner(${p.id})">✏️</button>
+                <button class="btn btn-sm btn-danger" onclick="deletePartner(${p.id})">🗑️</button>
+            </td>
+        </tr>`;
+    }).join('') || '<tr><td colspan="8" style="text-align:center">شریکی ثبت نشده</td></tr>';
+}
+
+$('addPartnerBtn').onclick = () => {
+    Modal.open('افزودن شریک', `
+        <div class="form-group"><label>نام</label><input type="text" id="prName" class="form-control"></div>
+        <div class="form-group"><label>فیصدی شراکت (٪)</label><input type="number" id="prPercent" class="form-control" step="any" value="0"></div>
+        <div class="form-group"><label>شماره تماس</label><input type="text" id="prPhone" class="form-control"></div>
+        <small style="color:#64748b">سهم شریک از فایده یا زیان کل شرکت (درآمد منهای هزینه) خودکار بر اساس فیصدی حساب می‌شود.</small>
+    `, '<button class="btn btn-primary" onclick="savePartner()">ذخیره</button>');
+};
+
+function savePartner() {
+    const name = $('prName').value.trim();
+    if (!name) return alert('نام الزامی است');
+    DB.addPartner({
+        name,
+        sharePercent: Number($('prPercent').value) || 0,
+        phone: $('prPhone').value.trim()
+    });
+    Modal.close();
+    loadPartners();
+}
+
+function editPartner(id) {
+    const p = DB.getPartners().find(x => String(x.id) === String(id));
+    if (!p) return;
+    Modal.open('ویرایش شریک', `
+        <div class="form-group"><label>نام</label><input type="text" id="prName" class="form-control" value="${escAttr(p.name)}"></div>
+        <div class="form-group"><label>فیصدی شراکت (٪)</label><input type="number" id="prPercent" class="form-control" step="any" value="${p.sharePercent}"></div>
+        <div class="form-group"><label>شماره تماس</label><input type="text" id="prPhone" class="form-control" value="${escAttr(p.phone || '')}"></div>
+    `, `<button class="btn btn-primary" onclick="savePartnerEdit(${id})">بروزرسانی</button>`);
+}
+
+function savePartnerEdit(id) {
+    const name = $('prName').value.trim();
+    if (!name) return alert('نام الزامی است');
+    DB.updatePartner(id, {
+        name,
+        sharePercent: Number($('prPercent').value) || 0,
+        phone: $('prPhone').value.trim()
+    });
+    Modal.close();
+    loadPartners();
+}
+
+function deletePartner(id) {
+    if (confirm('این شریک حذف شود؟')) { DB.deletePartner(id); loadPartners(); }
+}
+
+function partnerWithdrawModal(id) {
+    const p = DB.getPartners().find(x => String(x.id) === String(id));
+    if (!p) return;
+    Modal.open('برداشت — ' + p.name, `
+        <p style="font-size:13px;color:#475569">سهم از فایده/زیان: ${formatMoney(p.share)}</p>
+        <p style="font-size:13px;color:#475569">برداشت‌شده تاکنون: ${formatMoney(p.withdrawn)}</p>
+        <p style="font-size:13px;color:#475569">باقی‌مانده قابل برداشت: ${formatMoney(p.balance)}</p>
+        <div class="form-group"><label>مبلغ برداشت (افغانی)</label><input type="number" id="pwAmount" class="form-control" value="${Math.max(0, p.balance)}"></div>
+        <div class="form-group"><label>تاریخ (شمسی)</label><input type="text" id="pwDate" class="form-control" value="${todayJalali()}"></div>
+        <div class="form-group"><label>یادداشت</label><input type="text" id="pwNote" class="form-control" placeholder="مثلاً برداشت نقدی"></div>
+    `, `<button class="btn btn-success" onclick="savePartnerWithdraw(${id})">ثبت برداشت</button>`);
+}
+
+function savePartnerWithdraw(id) {
+    const amount = Number($('pwAmount').value) || 0;
+    if (amount <= 0) return alert('مبلغ نامعتبر');
+    DB.addPartnerWithdrawal(id, { amount, date: $('pwDate').value, note: $('pwNote').value || '' });
+    Modal.close();
+    loadPartners();
+}
+
+function removePartnerWithdrawal(partnerId, wId) {
+    if (!confirm('این برداشت حذف شود؟')) return;
+    DB.deletePartnerWithdrawal(partnerId, wId);
+    loadPartners();
+    Modal.close();
+    viewPartner(partnerId);
+}
+
+function viewPartner(id) {
+    const p = DB.getPartners().find(x => String(x.id) === String(id));
+    if (!p) return;
+    const np = DB.companyNetProfit();
+    const wRows = (p.withdrawals || []).slice().reverse().map(w => `
+        <tr>
+            <td style="padding:4px 8px; border:1px solid #cbd5e1; font-size:12px;">${toPersianDate(w.date)}</td>
+            <td style="padding:4px 8px; border:1px solid #cbd5e1; font-size:12px;">${w.note || '-'}</td>
+            <td style="padding:4px 8px; border:1px solid #cbd5e1; font-size:12px; text-align:left; direction:ltr;">${formatMoney(w.amount)}</td>
+            <td class="no-print" style="padding:4px 8px; border:1px solid #cbd5e1; text-align:center;"><button class="btn btn-sm btn-danger no-print" onclick="removePartnerWithdrawal(${p.id}, ${w.id})">🗑️</button></td>
+        </tr>`).join('') || '<tr><td colspan="4" style="text-align:center; padding:8px; font-size:12px; color:#666;">برداشتی ثبت نشده</td></tr>';
+    Modal.open(`حساب شریک — ${p.name}`, `
+        <div class="print-section" style="font-family: Vazirmatn, Tahoma, sans-serif; font-size:13px; color:#1e293b;">
+            <table style="width:100%; border-collapse:collapse; margin-bottom:12px;">
+                <tr>
+                    <td style="padding:5px 8px; border:1px solid #cbd5e1; background:#f8fafc; font-weight:600; width:25%;">فیصدی شراکت</td>
+                    <td style="padding:5px 8px; border:1px solid #cbd5e1; width:25%;">${p.sharePercent}٪</td>
+                    <td style="padding:5px 8px; border:1px solid #cbd5e1; background:#f8fafc; font-weight:600; width:25%;">${np.net >= 0 ? 'فایده خالص شرکت' : 'زیان خالص شرکت'}</td>
+                    <td style="padding:5px 8px; border:1px solid #cbd5e1; width:25%;">${formatMoney(np.net)}</td>
+                </tr>
+                <tr>
+                    <td style="padding:5px 8px; border:1px solid #cbd5e1; background:#f0fdfa; font-weight:600; color:#0f766e;">سهم از فایده/زیان</td>
+                    <td style="padding:5px 8px; border:1px solid #cbd5e1; font-weight:700;">${formatMoney(p.share)}</td>
+                    <td style="padding:5px 8px; border:1px solid #cbd5e1; background:#f0fdf4; font-weight:600; color:#047857;">برداشت / باقی</td>
+                    <td style="padding:5px 8px; border:1px solid #cbd5e1; font-weight:700;">${formatMoney(p.withdrawn)} / <span style="color:${p.balance >= 0 ? '#047857' : '#b91c1c'}">${formatMoney(p.balance)}</span></td>
+                </tr>
+            </table>
+            <div style="font-size:12px; color:#64748b; margin-bottom:10px;">سهم = فایده/زیان خالص شرکت × فیصدی شراکت. برداشت‌ها در فایده/زیان شرکت حساب نمی‌شوند.</div>
+            <div style="font-size:14px; font-weight:700; color:#0f766e; border-bottom:1px solid #cbd5e1; padding-bottom:4px; margin-bottom:6px;">برداشت‌ها</div>
+            <table style="width:100%; border-collapse:collapse;">
+                <thead><tr style="background:#f1f5f9;">
+                    <th style="padding:5px 8px; border:1px solid #cbd5e1; font-size:12px; text-align:right; width:20%;">تاریخ</th>
+                    <th style="padding:5px 8px; border:1px solid #cbd5e1; font-size:12px; text-align:right;">یادداشت</th>
+                    <th style="padding:5px 8px; border:1px solid #cbd5e1; font-size:12px; text-align:left; direction:ltr; width:22%;">مبلغ</th>
+                    <th class="no-print" style="padding:5px 8px; border:1px solid #cbd5e1; font-size:12px; text-align:center; width:10%;">حذف</th>
+                </tr></thead>
+                <tbody>${wRows}</tbody>
+            </table>
+        </div>
+    `, `<button class="btn btn-primary no-print" onclick="window.print()">🖖️ پرینت</button>`);
 }
 
 // ==================== FINANCE ====================
@@ -3218,6 +3400,17 @@ const SECTION_COLUMNS = {
             });
         },
         reload: loadEmployees
+    },
+    partners: {
+        headers: ['شماره', 'نام', 'فیصدی شراکت', 'شماره تماس', 'سهم از فایده/زیان', 'برداشت‌شده', 'باقی‌مانده'],
+        keys: ['id', 'name', 'sharePercent', 'phone', 'share', 'withdrawn', 'balance'],
+        getData: () => DB.getPartners(),
+        addRow: (row) => DB.addPartner({
+            name: row['نام'] || '',
+            sharePercent: Number(row['فیصدی شراکت']) || 0,
+            phone: row['شماره تماس'] || ''
+        }),
+        reload: loadPartners
     },
     debtors: {
         headers: ['نام', 'شماره تماس', 'مجموع بدهی', 'آخرین تاریخ', 'منابع'],
