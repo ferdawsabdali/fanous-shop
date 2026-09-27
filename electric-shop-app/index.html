@@ -7,12 +7,12 @@
     <meta http-equiv="Pragma" content="no-cache">
     <meta http-equiv="Expires" content="0">
     <title>لوازم برق و صنعت فانوس</title>
-    <link rel="stylesheet" href="assets/css/style.css?v=26">
+    <link rel="stylesheet" href="assets/css/style.css?v=27">
     <link href="https://cdn.jsdelivr.net/gh/rastikerdar/vazirmatn@v33.003/Vazirmatn-font-face.css" rel="stylesheet">
     <script>
     /* Cache-bust: force reload if cached version is old */
     (function(){
-        var V=26;
+        var V=27;
         try{
             var s=localStorage.getItem('_fanous_v');
             if(s && parseInt(s)<V){
@@ -61,30 +61,32 @@
                     <span class="nav-icon">📊</span>
                     <span>داشبورد</span>
                 </a>
-                <a href="#" class="nav-link" data-page="inventory">
-                    <span class="nav-icon">📦</span>
-                    <span>انبار و موجودی</span>
-                </a>
-                <a href="#" class="nav-link" data-page="sales">
-                    <span class="nav-icon">🛒</span>
-                    <span>فروش و فاکتور</span>
-                </a>
-                <a href="#" class="nav-link nav-shortcut" data-shortcut="transaction">
-                    <span class="nav-icon">🧾</span>
-                    <span>ثبت تراکنش</span>
-                </a>
-                <a href="#" class="nav-link nav-shortcut" data-shortcut="purchase">
-                    <span class="nav-icon">🛍️</span>
-                    <span>خریداری جدید</span>
-                </a>
-                <a href="#" class="nav-link" data-page="repairs">
-                    <span class="nav-icon">🔧</span>
-                    <span>تعمیرات</span>
-                </a>
-                <a href="#" class="nav-link" data-page="projects">
-                    <span class="nav-icon">🏗️</span>
-                    <span>پروژه‌های برق‌کاری</span>
-                </a>
+
+                <div class="nav-group">
+                    <a href="#" class="nav-link nav-toggle">
+                        <span class="nav-icon">🏪</span>
+                        <span>عملیات دکان</span>
+                        <span class="nav-chevron">▼</span>
+                    </a>
+                    <div class="nav-submenu">
+                        <a href="#" class="nav-link" data-page="inventory">📦 انبار و موجودی</a>
+                        <a href="#" class="nav-link" data-page="sales">🛒 فروش و فاکتور</a>
+                        <a href="#" class="nav-link nav-shortcut" data-shortcut="purchase">🛍️ خریداری جدید</a>
+                        <a href="#" class="nav-link nav-shortcut" data-shortcut="transaction">🧾 ثبت تراکنش</a>
+                    </div>
+                </div>
+
+                <div class="nav-group">
+                    <a href="#" class="nav-link nav-toggle">
+                        <span class="nav-icon">🔧</span>
+                        <span>تعمیر و پروژه</span>
+                        <span class="nav-chevron">▼</span>
+                    </a>
+                    <div class="nav-submenu">
+                        <a href="#" class="nav-link" data-page="repairs">🔧 تعمیرات</a>
+                        <a href="#" class="nav-link" data-page="projects">🏗️ پروژه‌های برق‌کاری</a>
+                    </div>
+                </div>
 
                 <div class="nav-group">
                     <a href="#" class="nav-link nav-toggle">
@@ -93,8 +95,6 @@
                         <span class="nav-chevron">▼</span>
                     </a>
                     <div class="nav-submenu">
-                        <a href="#" class="nav-link" data-page="purchases">🛍️ خریداری</a>
-                        <a href="#" class="nav-link" data-page="finance">💰 امور مالی</a>
                         <a href="#" class="nav-link" data-page="debtors">📝 طلب و قروض</a>
                         <a href="#" class="nav-link" data-page="assets">🪑 دارایی‌ها</a>
                     </div>
@@ -822,8 +822,8 @@
     </div>
 
     <script src="https://cdn.sheetjs.com/xlsx-0.20.3/package/dist/xlsx.full.min.js"></script>
-    <script src="assets/js/db.js?v=26"></script>
-    <script src="assets/js/cloud.js?v=26"></script>
-    <script src="assets/js/app.js?v=26"></script>
+    <script src="assets/js/db.js?v=27"></script>
+    <script src="assets/js/cloud.js?v=27"></script>
+    <script src="assets/js/app.js?v=27"></script>
 </body>
 </html>

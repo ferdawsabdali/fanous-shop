@@ -99,28 +99,43 @@ document.querySelectorAll('.nav-toggle').forEach(toggle => {
 document.querySelectorAll('.nav-link[data-page]').forEach(link => {
     link.addEventListener('click', e => {
         e.preventDefault();
-        const page = link.dataset.page;
-        pages.forEach(p => $(p).classList.remove('active'));
-        $(page).classList.add('active');
-        document.querySelectorAll('.nav-link').forEach(l => l.classList.remove('active'));
-        link.classList.add('active');
-        document.querySelectorAll('.nav-group').forEach(g => g.classList.remove('open'));
-        const parentGroup = link.closest('.nav-group');
-        if (parentGroup) parentGroup.classList.add('open');
-        const titleSpan = link.querySelector('span:nth-child(2)');
-        $('pageTitle').textContent = titleSpan ? titleSpan.textContent : link.textContent.trim();
-        if (window.innerWidth <= 768) $('sidebar').classList.remove('open');
-        refreshPage(page);
+        showPage(link.dataset.page);
     });
 });
 
 $('menuToggle').onclick = () => $('sidebar').classList.toggle('open');
 $('closeSidebar').onclick = () => $('sidebar').classList.remove('open');
 
+// Page titles (used as fallback for pages that no longer have a sidebar link,
+// e.g. امور مالی which is now reached only through the ثبت تراکنش shortcut)
+const PAGE_TITLES = {
+    dashboard: 'داشبورد', inventory: 'انبار و موجودی', sales: 'فروش و فاکتور',
+    purchases: 'خریداری جدید', repairs: 'تعمیرات', projects: 'پروژه‌های برق‌کاری',
+    finance: 'امور مالی', debtors: 'طلب و قروض', assets: 'دارایی‌ها',
+    employees: 'کارمندان و کارگران', partners: 'شرکا', reports: 'گزارش‌ها', settings: 'تنظیمات'
+};
+
+// Core page switcher: works whether or not the page has a visible sidebar link.
+function showPage(page) {
+    if (!pages.includes(page) || !$(page)) return;
+    pages.forEach(p => $(p).classList.remove('active'));
+    $(page).classList.add('active');
+    document.querySelectorAll('.nav-link').forEach(l => l.classList.remove('active'));
+    document.querySelectorAll('.nav-group').forEach(g => g.classList.remove('open'));
+    const link = document.querySelector(`.nav-link[data-page="${page}"]`);
+    if (link) {
+        link.classList.add('active');
+        const parentGroup = link.closest('.nav-group');
+        if (parentGroup) parentGroup.classList.add('open');
+    }
+    $('pageTitle').textContent = PAGE_TITLES[page] || page;
+    if (window.innerWidth <= 768) $('sidebar').classList.remove('open');
+    refreshPage(page);
+}
+
 // Opens a page from code (same behaviour as clicking its sidebar link)
 function goToPage(page) {
-    const link = document.querySelector(`.nav-link[data-page="${page}"]`);
-    if (link) link.click();
+    showPage(page);
 }
 
 /* Sidebar shortcuts: jump to the page and open its form right away */
