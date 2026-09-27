@@ -283,11 +283,14 @@ $('searchProduct').oninput = e => {
 
 $('addProductBtn').onclick = () => {
     Modal.open('افزودن محصول', `
-        <div class="form-group"><label>نام محصول</label><input type="text" id="pName" class="form-control"></div>
-
-        <div class="form-group"><label>واحد اندازه‌گیری</label>${unitSelectHtml('pUnit', DEFAULT_UNIT)}</div>
-        <div class="form-group"><label>قیمت خرید (افغانی)</label><input type="number" id="pBuy" class="form-control"></div>
-        <div class="form-group"><label>قیمت فروش (افغانی)</label><input type="number" id="pSell" class="form-control"></div>
+        <div class="form-row">
+            <div class="form-group"><label>نام محصول</label><input type="text" id="pName" class="form-control"></div>
+            <div class="form-group"><label>واحد اندازه‌گیری</label>${unitSelectHtml('pUnit', DEFAULT_UNIT)}</div>
+        </div>
+        <div class="form-row">
+            <div class="form-group"><label>قیمت خرید (افغانی)</label><input type="number" id="pBuy" class="form-control"></div>
+            <div class="form-group"><label>قیمت فروش (افغانی)</label><input type="number" id="pSell" class="form-control"></div>
+        </div>
         <div class="form-group"><label>موجودی اولیه</label><input type="number" id="pStock" class="form-control" value="0" step="any"></div>
     `, '<button class="btn btn-primary" onclick="saveProduct()">ذخیره</button>');
 };
@@ -322,10 +325,14 @@ function saveProduct() {
 function editProduct(id) {
     const p = DB.getProduct(id);
     Modal.open('ویرایش محصول', `
-        <div class="form-group"><label>نام محصول</label><input type="text" id="pName" class="form-control" value="${escAttr(p.name)}"></div>
-        <div class="form-group"><label>واحد اندازه‌گیری</label>${unitSelectHtml('pUnit', p.unit)}</div>
-        <div class="form-group"><label>قیمت خرید</label><input type="number" id="pBuy" class="form-control" value="${p.buyPrice}"></div>
-        <div class="form-group"><label>قیمت فروش</label><input type="number" id="pSell" class="form-control" value="${p.sellPrice}"></div>
+        <div class="form-row">
+            <div class="form-group"><label>نام محصول</label><input type="text" id="pName" class="form-control" value="${escAttr(p.name)}"></div>
+            <div class="form-group"><label>واحد اندازه‌گیری</label>${unitSelectHtml('pUnit', p.unit)}</div>
+        </div>
+        <div class="form-row">
+            <div class="form-group"><label>قیمت خرید</label><input type="number" id="pBuy" class="form-control" value="${p.buyPrice}"></div>
+            <div class="form-group"><label>قیمت فروش</label><input type="number" id="pSell" class="form-control" value="${p.sellPrice}"></div>
+        </div>
         <div class="form-group"><label>موجودی</label><input type="number" id="pStock" class="form-control" value="${p.stock}" step="any"></div>
     `, `<button class="btn btn-primary" onclick="updateProduct(${id})">بروزرسانی</button>`);
 }
@@ -682,13 +689,19 @@ $('searchRepair').oninput = e => {
 
 $('newRepairBtn').onclick = () => {
     Modal.open('ثبت تعمیر جدید', `
-        <div class="form-group"><label>نام مشتری</label><input type="text" id="rCustomer" class="form-control"></div>
-        <div class="form-group"><label>دستگاه</label><input type="text" id="rDevice" class="form-control"></div>
+        <div class="form-row">
+            <div class="form-group"><label>نام مشتری</label><input type="text" id="rCustomer" class="form-control"></div>
+            <div class="form-group"><label>دستگاه</label><input type="text" id="rDevice" class="form-control"></div>
+        </div>
         <div class="form-group"><label>مشکل/توضیحات</label><textarea id="rIssue" class="form-control"></textarea></div>
-        <div class="form-group"><label>تاریخ دریافت (شمسی)</label><input type="text" id="rDate" class="form-control" placeholder="1403-05-01" value="${todayJalali()}"></div>
-        <div class="form-group"><label>شماره تماس</label><input type="text" id="rPhone" class="form-control"></div>
-        <div class="form-group"><label>وضعیت</label><select id="rStatus" class="form-control"><option>دریافت‌شده</option><option>در حال تعمیر</option><option>تکمیل‌شده</option><option>تحویل‌داده‌شده</option></select></div>
-        <div class="form-group"><label>هزینه تعمیر (افغانی)</label><input type="number" id="rCost" class="form-control" value="0"></div>
+        <div class="form-row">
+            <div class="form-group"><label>تاریخ دریافت (شمسی)</label><input type="text" id="rDate" class="form-control" placeholder="1403-05-01" value="${todayJalali()}"></div>
+            <div class="form-group"><label>شماره تماس</label><input type="text" id="rPhone" class="form-control"></div>
+        </div>
+        <div class="form-row">
+            <div class="form-group"><label>وضعیت</label><select id="rStatus" class="form-control"><option>دریافت‌شده</option><option>در حال تعمیر</option><option>تکمیل‌شده</option><option>تحویل‌داده‌شده</option></select></div>
+            <div class="form-group"><label>هزینه تعمیر (افغانی)</label><input type="number" id="rCost" class="form-control" value="0"></div>
+        </div>
         ${workerShareEditorHtml()}
     `, '<button class="btn btn-primary" onclick="saveRepair()">ثبت</button>');
     initWorkerShareEditor();
@@ -720,18 +733,24 @@ function saveRepair() {
 function editRepair(id) {
     const r = DB.getRepairs().find(x => x.id === id);
     Modal.open('ویرایش تعمیر', `
-        <div class="form-group"><label>نام مشتری</label><input type="text" id="rCustomer" class="form-control" value="${r.customer}"></div>
-        <div class="form-group"><label>دستگاه</label><input type="text" id="rDevice" class="form-control" value="${r.device}"></div>
+        <div class="form-row">
+            <div class="form-group"><label>نام مشتری</label><input type="text" id="rCustomer" class="form-control" value="${r.customer}"></div>
+            <div class="form-group"><label>دستگاه</label><input type="text" id="rDevice" class="form-control" value="${r.device}"></div>
+        </div>
         <div class="form-group"><label>مشکل</label><textarea id="rIssue" class="form-control">${r.issue}</textarea></div>
-        <div class="form-group"><label>وضعیت</label><select id="rStatus" class="form-control">
-            <option ${r.status === 'دریافت‌شده' ? 'selected' : ''}>دریافت‌شده</option>
-            <option ${r.status === 'در حال تعمیر' ? 'selected' : ''}>در حال تعمیر</option>
-            <option ${r.status === 'تکمیل‌شده' ? 'selected' : ''}>تکمیل‌شده</option>
-            <option ${r.status === 'تحویل‌داده‌شده' ? 'selected' : ''}>تحویل‌داده‌شده</option>
-        </select></div>
-        <div class="form-group"><label>هزینه</label><input type="number" id="rCost" class="form-control" value="${r.cost}"></div>
-        <div class="form-group"><label>پرداخت‌شده</label><input type="number" id="rPaid" class="form-control" value="${r.paid || 0}"></div>
-        <div class="form-group"><label>باقی‌مانده</label><input type="number" id="rRemaining" class="form-control" value="${r.remaining || 0}" readonly></div>
+        <div class="form-row">
+            <div class="form-group"><label>وضعیت</label><select id="rStatus" class="form-control">
+                <option ${r.status === 'دریافت‌شده' ? 'selected' : ''}>دریافت‌شده</option>
+                <option ${r.status === 'در حال تعمیر' ? 'selected' : ''}>در حال تعمیر</option>
+                <option ${r.status === 'تکمیل‌شده' ? 'selected' : ''}>تکمیل‌شده</option>
+                <option ${r.status === 'تحویل‌داده‌شده' ? 'selected' : ''}>تحویل‌داده‌شده</option>
+            </select></div>
+            <div class="form-group"><label>هزینه</label><input type="number" id="rCost" class="form-control" value="${r.cost}"></div>
+        </div>
+        <div class="form-row">
+            <div class="form-group"><label>پرداخت‌شده</label><input type="number" id="rPaid" class="form-control" value="${r.paid || 0}"></div>
+            <div class="form-group"><label>باقی‌مانده</label><input type="number" id="rRemaining" class="form-control" value="${r.remaining || 0}" readonly></div>
+        </div>
         ${workerShareEditorHtml()}
     `, `<button class="btn btn-primary" onclick="updateRepair(${id})">بروزرسانی</button>`);
     initWorkerShareEditor(DB.getWorkerShares('repair', id));
@@ -875,12 +894,18 @@ $('searchProject').oninput = e => {
 
 $('newProjectBtn').onclick = () => {
     Modal.open('پروژه جدید', `
-        <div class="form-group"><label>نام پروژه</label><input type="text" id="prName" class="form-control"></div>
-        <div class="form-group"><label>مشتری/شرکت</label><input type="text" id="prClient" class="form-control"></div>
-        <div class="form-group"><label>آدرس</label><input type="text" id="prAddress" class="form-control"></div>
-        <div class="form-group"><label>مبلغ قرارداد (افغانی)</label><input type="number" id="prAmount" class="form-control" value="0"></div>
-        <div class="form-group"><label>پیش‌پرداخت (افغانی)</label><input type="number" id="prPaid" class="form-control" value="0"></div>
-        <div class="form-group"><label>تاریخ شروع (شمسی)</label><input type="text" id="prStartDate" class="form-control" placeholder="1403-05-01" value="${todayJalali()}"></div>
+        <div class="form-row">
+            <div class="form-group"><label>نام پروژه</label><input type="text" id="prName" class="form-control"></div>
+            <div class="form-group"><label>مشتری/شرکت</label><input type="text" id="prClient" class="form-control"></div>
+        </div>
+        <div class="form-row">
+            <div class="form-group"><label>آدرس</label><input type="text" id="prAddress" class="form-control"></div>
+            <div class="form-group"><label>مبلغ قرارداد (افغانی)</label><input type="number" id="prAmount" class="form-control" value="0"></div>
+        </div>
+        <div class="form-row">
+            <div class="form-group"><label>پیش‌پرداخت (افغانی)</label><input type="number" id="prPaid" class="form-control" value="0"></div>
+            <div class="form-group"><label>تاریخ شروع (شمسی)</label><input type="text" id="prStartDate" class="form-control" placeholder="1403-05-01" value="${todayJalali()}"></div>
+        </div>
         <div class="form-group"><label>وضعیت</label><select id="prStatus" class="form-control"><option>شروع نشده</option><option>در حال اجرا</option><option>تکمیل‌شده</option></select></div>
         <div class="form-group"><label>توضیحات</label><textarea id="prDesc" class="form-control"></textarea></div>
         ${workerShareEditorHtml()}
@@ -923,10 +948,14 @@ function saveProject() {
 function editProject(id) {
     const p = DB.getProjects().find(x => x.id === id);
     Modal.open('ویرایش پروژه', `
-        <div class="form-group"><label>نام پروژه</label><input type="text" id="prName" class="form-control" value="${p.name}"></div>
-        <div class="form-group"><label>مشتری</label><input type="text" id="prClient" class="form-control" value="${p.client}"></div>
-        <div class="form-group"><label>آدرس</label><input type="text" id="prAddress" class="form-control" value="${p.address}"></div>
-        <div class="form-group"><label>مبلغ قرارداد</label><input type="number" id="prAmount" class="form-control" value="${p.amount}"></div>
+        <div class="form-row">
+            <div class="form-group"><label>نام پروژه</label><input type="text" id="prName" class="form-control" value="${p.name}"></div>
+            <div class="form-group"><label>مشتری</label><input type="text" id="prClient" class="form-control" value="${p.client}"></div>
+        </div>
+        <div class="form-row">
+            <div class="form-group"><label>آدرس</label><input type="text" id="prAddress" class="form-control" value="${p.address}"></div>
+            <div class="form-group"><label>مبلغ قرارداد</label><input type="number" id="prAmount" class="form-control" value="${p.amount}"></div>
+        </div>
         <div class="form-group"><label>وضعیت</label><select id="prStatus" class="form-control">
             <option ${p.status === 'شروع نشده' ? 'selected' : ''}>شروع نشده</option>
             <option ${p.status === 'در حال اجرا' ? 'selected' : ''}>در حال اجرا</option>
@@ -2315,10 +2344,18 @@ function updateCapitalDisplay() {
     const initialCapital = DB.getInitialCapital();
     const assetsValue = DB.getAssets().reduce((sum, a) => sum + (a.total || 0), 0);
     const remaining = Math.max(0, initialCapital - assetsValue);
+    // مجموع قیمت خرید اجناس فروخته‌شده (سرمایه‌ای که از فروش محصولات برگشت خورده است)
+    const soldCogs = DB.getSales().reduce((sum, s) => {
+        if (s.cogs != null) return sum + (Number(s.cogs) || 0);
+        const c = (s.items || []).reduce((a, it) => a + (Number(it.buyPrice) || 0) * (Number(it.qty) || 0), 0);
+        return sum + c;
+    }, 0);
+    // سرمایه جاری = الباقی سرمایه + جمع قیمت خرید محصولات فروخته‌شده
+    const currentCapital = remaining + soldCogs;
 
     if ($('displayInitialCapital')) $('displayInitialCapital').textContent = formatMoney(initialCapital);
     if ($('displayAssetsValue')) $('displayAssetsValue').textContent = formatMoney(assetsValue);
-    if ($('displayRemainingCapital')) $('displayRemainingCapital').textContent = formatMoney(remaining);
+    if ($('displayRemainingCapital')) $('displayRemainingCapital').textContent = formatMoney(currentCapital);
     if ($('initialCapitalInput')) $('initialCapitalInput').value = '';
 }
 
