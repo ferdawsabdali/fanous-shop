@@ -514,36 +514,44 @@ const DB = {
         const idx = data.repairs.findIndex(r => r.id === id);
         if (idx > -1) {
             const old = data.repairs[idx];
+            const oldPaid = Number(old.paid) || 0;
             const merged = { ...old, ...updated };
             merged.cost = Number(merged.cost) || 0;
             merged.paid = Number(merged.paid) || 0;
             merged.remaining = merged.cost - merged.paid;
+            if (merged.remaining < 0) merged.remaining = 0;
             data.repairs[idx] = merged;
 
-            const isCompleted = s => s === 'تکمیل‌شده' || s === 'تحویل‌داده‌شده';
-
-            // Status changed to completed -> add income based on paid amount
-            if (isCompleted(updated.status) && !isCompleted(old.status)) {
+            // Repair income follows the money actually RECEIVED (cash basis), NOT
+            // the status. Changing the status to تکمیل‌شده must never add income
+            // on its own — otherwise a payment made with the 💰 button (payRepair)
+            // plus the status change would count the same money twice.
+            // Only a change in the paid amount here is booked, as its difference.
+            const delta = merged.paid - oldPaid;
+            if (delta > 0) {
                 const tr = {
                     type: 'income',
-                    description: `تعمیر #${id} - ${old.device}`,
-                    amount: merged.paid,
+                    description: `پرداخت تعمیر #${id} - ${merged.device || ''}`,
+                    amount: delta,
                     category: 'تعمیرات',
                     date: todayJalali(),
-                    refType: 'repair',
+                    refType: 'repair_payment',
                     refId: id
                 };
                 tr.id = this.getNextId('transaction', data);
                 data.transactions.push(tr);
-            }
-            // Status changed from completed to non-completed -> remove income
-            else if (isCompleted(old.status) && !isCompleted(updated.status)) {
-                data.transactions = data.transactions.filter(t => !(t.refType === 'repair' && t.refId === id));
-            }
-            // If already completed and paid changed, update transaction amount
-            else if (isCompleted(old.status) && isCompleted(updated.status)) {
-                const tr = data.transactions.find(t => t.refType === 'repair' && t.refId === id);
-                if (tr) tr.amount = merged.paid;
+            } else if (delta < 0) {
+                // Paid amount was lowered: reverse the difference from this
+                // repair's recorded income so the total stays equal to paid.
+                let toRemove = -delta;
+                for (let i = data.transactions.length - 1; i >= 0 && toRemove > 0; i--) {
+                    const t = data.transactions[i];
+                    if (t.type === 'income' && (t.refType === 'repair' || t.refType === 'repair_payment') && String(t.refId) === String(id)) {
+                        const amt = Number(t.amount) || 0;
+                        if (amt <= toRemove) { toRemove -= amt; data.transactions.splice(i, 1); }
+                        else { t.amount = amt - toRemove; toRemove = 0; }
+                    }
+                }
             }
 
             this.save(data);
