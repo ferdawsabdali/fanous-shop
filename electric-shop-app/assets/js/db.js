@@ -326,11 +326,33 @@ const DB = {
         // Goods sold for a project / repair: the invoice belongs to that account
         const link = this._resolveSaleLink(data, sale);
         data.sales.push(sale);
-        // Reduce stock
+        // Reduce stock + capture the purchase cost of every sold item so the
+        // real net profit can subtract it (revenue is NOT pure profit).
+        let cogs = 0;
         sale.items.forEach(item => {
             const p = data.products.find(pr => pr.id === item.productId);
             if (p) p.stock -= item.qty;
+            const buy = p ? (Number(p.buyPrice) || 0) : (Number(item.buyPrice) || 0);
+            item.buyPrice = buy;
+            cogs += buy * (Number(item.qty) || 0);
         });
+        sale.cogs = cogs;
+        // Book the cost of goods sold as an expense so every profit view
+        // (company net profit, partner shares, profit report) subtracts it.
+        if (cogs > 0) {
+            const cogsTr = {
+                type: 'expense',
+                description: `قیمت خرید اجناس فروخته‌شده (فاکتور #${sale.id})`,
+                amount: cogs,
+                category: 'قیمت خرید اجناس',
+                date: sale.date,
+                refType: 'cogs',
+                refId: sale.id,
+                saleId: sale.id
+            };
+            cogsTr.id = this.getNextId('transaction', data);
+            data.transactions.push(cogsTr);
+        }
 
         if (link) {
             // Add the invoice total to the project's contract / repair cost so the
@@ -450,8 +472,9 @@ const DB = {
             });
         }
         data.sales = data.sales.filter(s => s.id !== id);
-        // Remove linked transactions
+        // Remove linked transactions (income + cost of goods sold)
         data.transactions = data.transactions.filter(t => !(t.refType === 'sale' && t.refId === id));
+        data.transactions = data.transactions.filter(t => !(t.refType === 'cogs' && t.refId === id));
         // Remove/update debtor (using same data object)
         if (sale && sale.debt > 0) {
             const debtor = data.debtors.find(d => d.saleIds.includes(sale.id));
@@ -786,7 +809,11 @@ const DB = {
         (d.transactions || []).forEach(t => {
             const amt = Number(t.amount) || 0;
             if (t.type === 'income') income += amt;
-            else if (t.type === 'expense') expense += amt;
+            // Buying stock is an inventory investment, not a profit expense — its
+            // cost is recognized as COGS (قیمت خرید اجناس) when the goods are
+            // actually sold. Skip purchase (خرید جنس) expenses here so the goods'
+            // cost is never subtracted twice.
+            else if (t.type === 'expense' && t.refType !== 'purchase') expense += amt;
         });
         return { income, expense, net: income - expense };
     },

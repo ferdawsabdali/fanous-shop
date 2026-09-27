@@ -2569,7 +2569,10 @@ function renderPurchasesReport(content, summary) {
 function renderProfitReport(content, summary) {
     const transactions = filterByDate(DB.getTransactions(), 'date');
     const incomeItems = transactions.filter(t => t.type === 'income');
-    const expenseItems = transactions.filter(t => t.type === 'expense');
+    // Buying stock (خرید جنس) is an inventory investment, not a profit expense;
+    // its cost is counted as COGS (قیمت خرید اجناس) when the goods are sold, so
+    // exclude purchase expenses here to avoid subtracting the cost twice.
+    const expenseItems = transactions.filter(t => t.type === 'expense' && t.refType !== 'purchase');
 
     const totalIncome = incomeItems.reduce((s, x) => s + (x.amount || 0), 0);
     const totalExpense = expenseItems.reduce((s, x) => s + (x.amount || 0), 0);
