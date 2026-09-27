@@ -674,14 +674,17 @@ $('newRepairBtn').onclick = () => {
         <div class="form-group"><label>شماره تماس</label><input type="text" id="rPhone" class="form-control"></div>
         <div class="form-group"><label>وضعیت</label><select id="rStatus" class="form-control"><option>دریافت‌شده</option><option>در حال تعمیر</option><option>تکمیل‌شده</option><option>تحویل‌داده‌شده</option></select></div>
         <div class="form-group"><label>هزینه تعمیر (افغانی)</label><input type="number" id="rCost" class="form-control" value="0"></div>
+        ${workerShareEditorHtml()}
     `, '<button class="btn btn-primary" onclick="saveRepair()">ثبت</button>');
+    initWorkerShareEditor();
 };
 
 function saveRepair() {
     const customer = $('rCustomer').value;
     if (!customer) return alert('نام مشتری الزامی است');
     const cost = Number($('rCost').value) || 0;
-    DB.addRepair({
+    const shares = collectWorkerShares();
+    const repair = DB.addRepair({
         customer, device: $('rDevice').value,
         issue: $('rIssue').value,
         receiveDate: $('rDate').value,
@@ -691,9 +694,11 @@ function saveRepair() {
         paid: 0,
         remaining: cost
     });
+    DB.setWorkerShares('repair', repair.id, shares);
     Modal.close();
     loadRepairs();
     loadFinance();
+    loadEmployees();
     loadDashboard();
 }
 
@@ -712,7 +717,9 @@ function editRepair(id) {
         <div class="form-group"><label>هزینه</label><input type="number" id="rCost" class="form-control" value="${r.cost}"></div>
         <div class="form-group"><label>پرداخت‌شده</label><input type="number" id="rPaid" class="form-control" value="${r.paid || 0}"></div>
         <div class="form-group"><label>باقی‌مانده</label><input type="number" id="rRemaining" class="form-control" value="${r.remaining || 0}" readonly></div>
+        ${workerShareEditorHtml()}
     `, `<button class="btn btn-primary" onclick="updateRepair(${id})">بروزرسانی</button>`);
+    initWorkerShareEditor(DB.getWorkerShares('repair', id));
 }
 
 function updateRepair(id) {
@@ -724,9 +731,11 @@ function updateRepair(id) {
         cost: Number($('rCost').value) || 0,
         paid: Number($('rPaid').value) || 0
     });
+    DB.setWorkerShares('repair', id, collectWorkerShares());
     Modal.close();
     loadRepairs();
     loadFinance();
+    loadEmployees();
     loadDashboard();
 }
 
@@ -859,7 +868,9 @@ $('newProjectBtn').onclick = () => {
         <div class="form-group"><label>تاریخ شروع (شمسی)</label><input type="text" id="prStartDate" class="form-control" placeholder="1403-05-01" value="${todayJalali()}"></div>
         <div class="form-group"><label>وضعیت</label><select id="prStatus" class="form-control"><option>شروع نشده</option><option>در حال اجرا</option><option>تکمیل‌شده</option></select></div>
         <div class="form-group"><label>توضیحات</label><textarea id="prDesc" class="form-control"></textarea></div>
+        ${workerShareEditorHtml()}
     `, '<button class="btn btn-primary" onclick="saveProject()">ذخیره</button>');
+    initWorkerShareEditor();
 };
 
 function saveProject() {
@@ -886,9 +897,11 @@ function saveProject() {
             refId: project.id
         });
     }
+    DB.setWorkerShares('project', project.id, collectWorkerShares());
     Modal.close();
     loadProjects();
     loadFinance();
+    loadEmployees();
     loadDashboard();
 }
 
@@ -904,7 +917,9 @@ function editProject(id) {
             <option ${p.status === 'در حال اجرا' ? 'selected' : ''}>در حال اجرا</option>
             <option ${p.status === 'تکمیل‌شده' ? 'selected' : ''}>تکمیل‌شده</option>
         </select></div>
+        ${workerShareEditorHtml()}
     `, `<button class="btn btn-primary" onclick="updateProject(${id})">بروزرسانی</button>`);
+    initWorkerShareEditor(DB.getWorkerShares('project', id));
 }
 
 function updateProject(id) {
@@ -915,8 +930,10 @@ function updateProject(id) {
         amount: Number($('prAmount').value) || 0,
         status: $('prStatus').value
     });
+    DB.setWorkerShares('project', id, collectWorkerShares());
     Modal.close();
     loadProjects();
+    loadEmployees();
     loadDashboard();
 }
 
@@ -958,6 +975,71 @@ function deleteProject(id) {
     if (confirm('حذف شود؟')) { DB.deleteProject(id); loadProjects(); loadFinance(); loadDashboard(); }
 }
 
+// ---------- Worker-share editor (used inside repair & project forms) ----------
+// Lets the shop owner pick which registered workers helped on a job and set
+// each one's cut by percent (فیصدی) or a fixed amount (مبلغ).
+let workerShareRowSeq = 0;
+
+function workerShareEditorHtml() {
+    return `
+    <div class="form-group" style="border-top:1px dashed #cbd5e1; padding-top:10px; margin-top:10px;">
+        <label>👷 کارگران همکار (اختیاری)</label>
+        <div id="workerShareRows"></div>
+        <button type="button" class="btn btn-sm btn-secondary" onclick="addWorkerShareRow()">➕ افزودن کارگر</button>
+        <small id="workerShareHint" style="display:block;color:#64748b;margin-top:6px;"></small>
+    </div>`;
+}
+
+function initWorkerShareEditor(existing) {
+    workerShareRowSeq = 0;
+    const cont = $('workerShareRows');
+    if (cont) cont.innerHTML = '';
+    const emps = DB.getEmployees();
+    const hint = $('workerShareHint');
+    if (!emps.length) {
+        if (hint) hint.innerHTML = '⚠️ هنوز کارگری ثبت نشده. ابتدا از بخش «کارمندان و کارگران» کارگران را ثبت کنید.';
+    } else if (hint) {
+        hint.textContent = 'فیصدی: درصدی از مبلغ کار (بدون احتساب جنس) — مبلغ: مقدار ثابت افغانی.';
+    }
+    (existing || []).forEach(s => addWorkerShareRow(s));
+}
+
+function addWorkerShareRow(preset) {
+    const cont = $('workerShareRows');
+    if (!cont) return;
+    const emps = DB.getEmployees();
+    if (!emps.length) { alert('ابتدا کارگران را در بخش «کارمندان و کارگران» ثبت کنید'); return; }
+    const preId = preset ? String(preset.employeeId) : '';
+    const preMode = preset ? preset.mode : 'percent';
+    const preVal = preset ? (preset.mode === 'amount' ? preset.amount : preset.rate) : '';
+    const opts = emps.map(e => `<option value="${escAttr(String(e.id))}" ${String(e.id) === preId ? 'selected' : ''}>${escAttr(e.name)} (${escAttr(e.role || '')})</option>`).join('');
+    const row = document.createElement('div');
+    row.className = 'ws-row';
+    row.id = 'ws' + (workerShareRowSeq++);
+    row.setAttribute('style', 'display:flex;gap:6px;margin-bottom:6px;align-items:center;');
+    row.innerHTML = `
+        <select class="form-control ws-emp" style="flex:2;min-width:0;">${opts}</select>
+        <select class="form-control ws-mode" style="flex:1;min-width:0;">
+            <option value="percent" ${preMode === 'percent' ? 'selected' : ''}>فیصدی ٪</option>
+            <option value="amount" ${preMode === 'amount' ? 'selected' : ''}>مبلغ</option>
+        </select>
+        <input type="number" step="any" class="form-control ws-val" style="flex:1;min-width:0;" placeholder="مقدار" value="${preVal !== '' && preVal != null ? escAttr(String(preVal)) : ''}">
+        <button type="button" class="btn btn-sm btn-danger" onclick="this.closest('.ws-row').remove()">✖</button>
+    `;
+    cont.appendChild(row);
+}
+
+function collectWorkerShares() {
+    const list = [];
+    document.querySelectorAll('#workerShareRows .ws-row').forEach(r => {
+        const employeeId = r.querySelector('.ws-emp').value;
+        const mode = r.querySelector('.ws-mode').value;
+        const value = Number(r.querySelector('.ws-val').value) || 0;
+        if (employeeId && value > 0) list.push({ employeeId, mode, value });
+    });
+    return list;
+}
+
 // Percent shares of workers registered on a project / repair
 function buildWorkerSharesHtml(refType, refId) {
     const shares = DB.getWorkerShares(refType, refId);
@@ -965,8 +1047,8 @@ function buildWorkerSharesHtml(refType, refId) {
     const rows = shares.map(s => `
         <tr>
             <td style="padding:4px 8px; border:1px solid #cbd5e1; font-size:12px;">${s.name} (${s.role})</td>
-            <td style="padding:4px 8px; border:1px solid #cbd5e1; font-size:12px;">${s.rate}٪</td>
-            <td style="padding:4px 8px; border:1px solid #cbd5e1; font-size:12px; text-align:left; direction:ltr;">${formatMoney(s.base || 0)}</td>
+            <td style="padding:4px 8px; border:1px solid #cbd5e1; font-size:12px;">${s.mode === 'amount' ? 'مبلغ ثابت' : s.rate + '٪'}</td>
+            <td style="padding:4px 8px; border:1px solid #cbd5e1; font-size:12px; text-align:left; direction:ltr;">${s.mode === 'amount' ? '—' : formatMoney(s.base || 0)}</td>
             <td style="padding:4px 8px; border:1px solid #cbd5e1; font-size:12px; text-align:left; direction:ltr;">${formatMoney(s.amount)}</td>
         </tr>`).join('');
     const sum = shares.reduce((t, s) => t + s.amount, 0);
@@ -982,7 +1064,7 @@ function buildWorkerSharesHtml(refType, refId) {
         <table style="width:100%; border-collapse:collapse; margin-bottom:12px; font-size:13px;">
             <thead><tr style="background:#f1f5f9;">
                 <th style="padding:5px 8px; border:1px solid #cbd5e1; font-size:12px; text-align:right;">شخص</th>
-                <th style="padding:5px 8px; border:1px solid #cbd5e1; font-size:12px; text-align:right; width:16%;">فیصدی</th>
+                <th style="padding:5px 8px; border:1px solid #cbd5e1; font-size:12px; text-align:right; width:16%;">نوع سهم</th>
                 <th style="padding:5px 8px; border:1px solid #cbd5e1; font-size:12px; text-align:left; direction:ltr; width:26%;">مبنای کار</th>
                 <th style="padding:5px 8px; border:1px solid #cbd5e1; font-size:12px; text-align:left; direction:ltr; width:28%;">مبلغ</th>
             </tr></thead>
@@ -1406,6 +1488,12 @@ function employeeEntryText(en) {
             ? (DB.getProjects().find(p => String(p.id) === String(en.refId)) || {}).name || ('#' + en.refId)
             : 'ترمیم #' + en.refId;
         return `${en.rate}٪ از ${en.refType === 'project' ? 'پروژه ' + label : label} (مبنای کار: ${formatMoney(en.base || 0)})`;
+    }
+    if (en.kind === 'refAmount') {
+        const label = en.refType === 'project'
+            ? (DB.getProjects().find(p => String(p.id) === String(en.refId)) || {}).name || ('#' + en.refId)
+            : 'ترمیم #' + en.refId;
+        return `مبلغ ثابت از ${en.refType === 'project' ? 'پروژه ' + label : label}`;
     }
     return `حقوق ماه${en.note ? ' — ' + en.note : ''}`;
 }

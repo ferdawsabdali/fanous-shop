@@ -586,6 +586,14 @@ const DB = {
         data.repairs = data.repairs.filter(r => r.id !== id);
         // Remove linked transactions
         data.transactions = data.transactions.filter(t => !(t.refType === 'repair' && t.refId === id));
+        // Remove worker-share entries tied to this repair
+        (data.employees || []).forEach(e => {
+            if (Array.isArray(e.entries)) {
+                e.entries = e.entries.filter(en =>
+                    !((en.kind === 'percent' || en.kind === 'refAmount') &&
+                      en.refType === 'repair' && String(en.refId) === String(id)));
+            }
+        });
         this.save(data);
     },
     
@@ -613,6 +621,14 @@ const DB = {
         data.projects = data.projects.filter(p => String(p.id) !== String(id));
         // Remove linked transactions
         data.transactions = data.transactions.filter(t => !(t.refType === 'project' && String(t.refId) === String(id)));
+        // Remove worker-share entries tied to this project
+        (data.employees || []).forEach(e => {
+            if (Array.isArray(e.entries)) {
+                e.entries = e.entries.filter(en =>
+                    !((en.kind === 'percent' || en.kind === 'refAmount') &&
+                      en.refType === 'project' && String(en.refId) === String(id)));
+            }
+        });
         this.save(data);
     },
     
@@ -742,19 +758,50 @@ const DB = {
         const out = [];
         (data.employees || []).forEach(e => {
             (e.entries || []).forEach(en => {
-                if (en.kind === 'percent' && en.refType === refType && String(en.refId) === String(refId)) {
+                if ((en.kind === 'percent' || en.kind === 'refAmount') && en.refType === refType && String(en.refId) === String(refId)) {
                     out.push({
                         employeeId: e.id,
                         name: e.name,
                         role: e.role,
-                        rate: Number(en.rate) || 0,
-                        base: this.percentBaseFor(refType, refId, data),
+                        mode: en.kind === 'percent' ? 'percent' : 'amount',
+                        rate: en.kind === 'percent' ? (Number(en.rate) || 0) : 0,
+                        base: en.kind === 'percent' ? this.percentBaseFor(refType, refId, data) : 0,
                         amount: this.employeeEntryAmount(data, en)
                     });
                 }
             });
         });
         return out;
+    },
+    // Replaces ALL worker shares (percent or fixed amount) tied to one
+    // project / repair. `list` items: { employeeId, mode:'percent'|'amount', value }.
+    // Called from the repair/project form so the shop owner can pick which
+    // registered workers helped and set each one's cut by percent or a fixed
+    // amount right when creating/editing the job.
+    setWorkerShares(refType, refId, list) {
+        const data = this.getAll();
+        // Drop any previous share rows for this exact job (so edits replace cleanly)
+        (data.employees || []).forEach(e => {
+            if (Array.isArray(e.entries)) {
+                e.entries = e.entries.filter(en =>
+                    !((en.kind === 'percent' || en.kind === 'refAmount') &&
+                      en.refType === refType && String(en.refId) === String(refId)));
+            }
+        });
+        (list || []).forEach(item => {
+            const emp = (data.employees || []).find(e => String(e.id) === String(item.employeeId));
+            if (!emp) return;
+            if (!Array.isArray(emp.entries)) emp.entries = [];
+            const val = Number(item.value) || 0;
+            if (val <= 0) return;
+            const maxId = emp.entries.reduce((m, en) => Math.max(m, Number(en.id) || 0), 0);
+            if (item.mode === 'amount') {
+                emp.entries.push({ id: maxId + 1, kind: 'refAmount', date: todayJalali(), refType, refId, amount: val });
+            } else {
+                emp.entries.push({ id: maxId + 1, kind: 'percent', date: todayJalali(), refType, refId, rate: val });
+            }
+        });
+        this.save(data);
     },
     updateEmployee(id, updated) {
         const data = this.getAll();
