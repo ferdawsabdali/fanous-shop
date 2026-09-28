@@ -2343,15 +2343,12 @@ function loadAssets() {
 function updateCapitalDisplay() {
     const initialCapital = DB.getInitialCapital();
     const assetsValue = DB.getAssets().reduce((sum, a) => sum + (a.total || 0), 0);
-    const remaining = Math.max(0, initialCapital - assetsValue);
-    // مجموع قیمت خرید اجناس فروخته‌شده (سرمایه‌ای که از فروش محصولات برگشت خورده است)
-    const soldCogs = DB.getSales().reduce((sum, s) => {
-        if (s.cogs != null) return sum + (Number(s.cogs) || 0);
-        const c = (s.items || []).reduce((a, it) => a + (Number(it.buyPrice) || 0) * (Number(it.qty) || 0), 0);
-        return sum + c;
-    }, 0);
-    // سرمایه جاری = الباقی سرمایه + جمع قیمت خرید محصولات فروخته‌شده
-    const currentCapital = remaining + soldCogs;
+    // مجموع قیمت خرید اجناسی که به انبار اضافه شده (از سرمایه جاری کم می‌شود)
+    const totalPurchases = DB.getPurchases().reduce((sum, p) => sum + (Number(p.total) || 0), 0);
+    // مجموع قیمت فروش اجناس فروخته‌شده (به سرمایه جاری اضافه می‌شود)
+    const totalSales = DB.getSales().reduce((sum, s) => sum + (Number(s.total) || 0), 0);
+    // سرمایه جاری = (سرمایه اولیه − مجموع دارایی‌ها) − خرید اجناس + فروش اجناس
+    const currentCapital = (initialCapital - assetsValue) - totalPurchases + totalSales;
 
     if ($('displayInitialCapital')) $('displayInitialCapital').textContent = formatMoney(initialCapital);
     if ($('displayAssetsValue')) $('displayAssetsValue').textContent = formatMoney(assetsValue);
