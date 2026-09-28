@@ -7,12 +7,12 @@
     <meta http-equiv="Pragma" content="no-cache">
     <meta http-equiv="Expires" content="0">
     <title>لوازم برق و صنعت فانوس</title>
-    <link rel="stylesheet" href="assets/css/style.css?v=30">
+    <link rel="stylesheet" href="assets/css/style.css?v=32">
     <link href="https://cdn.jsdelivr.net/gh/rastikerdar/vazirmatn@v33.003/Vazirmatn-font-face.css" rel="stylesheet">
     <script>
     /* Cache-bust: force reload if cached version is old */
     (function(){
-        var V=30;
+        var V=32;
         try{
             var s=localStorage.getItem('_fanous_v');
             if(s && parseInt(s)<V){
@@ -72,7 +72,7 @@
                         <a href="#" class="nav-link" data-page="inventory">📦 انبار و موجودی</a>
                         <a href="#" class="nav-link" data-page="sales">🛒 فروش و فاکتور</a>
                         <a href="#" class="nav-link nav-shortcut" data-shortcut="purchase">🛍️ خریداری جدید</a>
-                        <a href="#" class="nav-link nav-shortcut" data-shortcut="transaction">🧾 ثبت تراکنش</a>
+                        <a href="#" class="nav-link nav-shortcut" data-shortcut="transaction">🧾 ثبت مصرف</a>
                     </div>
                 </div>
 
@@ -562,11 +562,11 @@
                         </div>
                     </div>
                     <div class="page-actions">
-                        <button class="btn btn-primary" id="addTransactionBtn">+ ثبت تراکنش</button>
+                        <button class="btn btn-primary" id="addTransactionBtn">+ ثبت مصرف</button>
                         <button class="btn btn-success btn-sm" onclick="exportSectionExcel('transactions')" title="خروجی اکسل">📊 خروجی</button>
                         <input type="file" id="importTransactionsFile" accept=".xlsx,.xls" hidden onchange="importSectionExcel('transactions', this)">
                         <button class="btn btn-warning btn-sm" onclick="document.getElementById('importTransactionsFile').click()" title="ورودی اکسل">📥 ورودی</button>
-                        <input type="text" class="search-input" id="searchTransaction" placeholder="جستجوی تراکنش...">
+                        <input type="text" class="search-input" id="searchTransaction" placeholder="جستجوی مصرف...">
                     </div>
                     <div class="card">
                         <div class="card-body">
@@ -574,7 +574,6 @@
                                 <thead>
                                     <tr>
                                         <th>تاریخ</th>
-                                        <th>نوع</th>
                                         <th>شرح</th>
                                         <th>مبلغ</th>
                                         <th>عملیات</th>
@@ -822,8 +821,8 @@
     </div>
 
     <script src="https://cdn.sheetjs.com/xlsx-0.20.3/package/dist/xlsx.full.min.js"></script>
-    <script src="assets/js/db.js?v=30"></script>
-    <script src="assets/js/cloud.js?v=30"></script>
-    <script src="assets/js/app.js?v=30"></script>
+    <script src="assets/js/db.js?v=32"></script>
+    <script src="assets/js/cloud.js?v=32"></script>
+    <script src="assets/js/app.js?v=32"></script>
 </body>
 </html>

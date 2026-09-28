@@ -1854,7 +1854,8 @@ function loadFinance() {
     $('financeReceivables').textContent = formatMoney(receivables);
     $('financeMarketDebt').textContent = formatMoney(payables);
 
-    allTransactions = [...data.transactions].reverse();
+    // فقط مصارف دستی (هزینه‌هایی که خود کاربر ثبت کرده)؛ موارد خودکار (خرید، فروش، معاش، ...) در بخش‌های دیگر ثبت می‌شود
+    allTransactions = data.transactions.filter(t => t.type === 'expense' && !t.refType).reverse();
     renderTransactions(allTransactions);
 }
 
@@ -1863,8 +1864,7 @@ $('searchTransaction').oninput = e => {
     const filtered = allTransactions.filter(t =>
         (t.description || '').includes(q) ||
         (t.date || '').includes(q) ||
-        String(t.amount).includes(q) ||
-        (t.type === 'income' ? 'درآمد' : 'هزینه').includes(q)
+        String(t.amount).includes(q)
     );
     txPage = 1;
     renderTransactions(filtered);
@@ -1881,12 +1881,11 @@ function renderTransactions(list) {
     $('transactionsTable').innerHTML = pageItems.map(t => `
         <tr>
             <td>${toPersianDate(t.date)}</td>
-            <td><span class="badge badge-${t.type === 'income' ? 'success' : 'danger'}">${t.type === 'income' ? 'درآمد' : 'هزینه'}</span></td>
             <td>${t.description}</td>
             <td>${formatMoney(t.amount)}</td>
             <td><button class="btn btn-sm btn-danger" onclick="deleteTransaction(${t.id})">🗑️</button></td>
         </tr>
-    `).join('') || '<tr><td colspan="5" style="text-align:center">تراکنشی ثبت نشده</td></tr>';
+    `).join('') || '<tr><td colspan="4" style="text-align:center">مصرفی ثبت نشده</td></tr>';
 
     let paginationHtml = '';
     if (totalPages > 1) {
@@ -1903,9 +1902,8 @@ function changeTxPage(newPage) {
 }
 
 $('addTransactionBtn').onclick = () => {
-    Modal.open('ثبت تراکنش جدید', `
-        <div class="form-group"><label>نوع</label><select id="tType" class="form-control"><option value="income">درآمد</option><option value="expense">هزینه</option></select></div>
-        <div class="form-group"><label>شرح</label><input type="text" id="tDesc" class="form-control"></div>
+    Modal.open('ثبت مصرف جدید', `
+        <div class="form-group"><label>شرح مصرف</label><input type="text" id="tDesc" class="form-control" placeholder="مثلاً کرایه دکان، بیل برق، ..."></div>
         <div class="form-group"><label>مبلغ (افغانی)</label><input type="number" id="tAmount" class="form-control"></div>
         <div class="form-group"><label>تاریخ (شمسی)</label><input type="text" id="tDate" class="form-control" placeholder="1403-05-01" value="${todayJalali()}"></div>
     `, '<button class="btn btn-primary" onclick="saveTransaction()">ثبت</button>');
@@ -1916,7 +1914,7 @@ function saveTransaction() {
     const amount = Number($('tAmount').value) || 0;
     if (!desc || amount <= 0) return alert('لطفاً همه فیلدها را پر کنید');
     DB.addTransaction({
-        type: $('tType').value,
+        type: 'expense',
         description: desc,
         amount,
         date: $('tDate').value
@@ -2343,12 +2341,12 @@ function loadAssets() {
 function updateCapitalDisplay() {
     const initialCapital = DB.getInitialCapital();
     const assetsValue = DB.getAssets().reduce((sum, a) => sum + (a.total || 0), 0);
-    // مجموع قیمت خرید اجناسی که به انبار اضافه شده (از سرمایه جاری کم می‌شود)
-    const totalPurchases = DB.getPurchases().reduce((sum, p) => sum + (Number(p.total) || 0), 0);
-    // مجموع قیمت فروش اجناس فروخته‌شده (به سرمایه جاری اضافه می‌شود)
-    const totalSales = DB.getSales().reduce((sum, s) => sum + (Number(s.total) || 0), 0);
-    // سرمایه جاری = (سرمایه اولیه − مجموع دارایی‌ها) − خرید اجناس + فروش اجناس
-    const currentCapital = (initialCapital - assetsValue) - totalPurchases + totalSales;
+    // مجموع مبلغ پرداخت‌شده بابت خرید اجناس (فقط پول نقد پرداخت‌شده؛ نسیه حساب نمی‌شود)
+    const totalPurchasesPaid = DB.getPurchases().reduce((sum, p) => sum + (Number(p.paid) || 0), 0);
+    // مجموع مبلغ دریافت‌شده بابت فروش اجناس (فقط پول نقد دریافت‌شده؛ نسیه حساب نمی‌شود)
+    const totalSalesReceived = DB.getSales().reduce((sum, s) => sum + (Number(s.paid) || 0), 0);
+    // سرمایه جاری = (سرمایه اولیه − مجموع دارایی‌ها) − پول پرداخت‌شده خرید + پول دریافت‌شده فروش
+    const currentCapital = (initialCapital - assetsValue) - totalPurchasesPaid + totalSalesReceived;
 
     if ($('displayInitialCapital')) $('displayInitialCapital').textContent = formatMoney(initialCapital);
     if ($('displayAssetsValue')) $('displayAssetsValue').textContent = formatMoney(assetsValue);
@@ -3567,10 +3565,10 @@ const SECTION_COLUMNS = {
         reload: loadDebtors
     },
     transactions: {
-        headers: ['شماره', 'تاریخ', 'نوع', 'شرح', 'مبلغ'],
-        keys: ['id', 'date', 'type', 'description', 'amount'],
-        getData: () => DB.getTransactions(),
-        addRow: (row) => DB.addTransaction({ type: row['نوع'] || 'expense', description: row['شرح'] || '', amount: Number(row['مبلغ']) || 0, date: row['تاریخ'] || todayJalali() }),
+        headers: ['شماره', 'تاریخ', 'شرح', 'مبلغ'],
+        keys: ['id', 'date', 'description', 'amount'],
+        getData: () => DB.getTransactions().filter(t => t.type === 'expense' && !t.refType),
+        addRow: (row) => DB.addTransaction({ type: 'expense', description: row['شرح'] || '', amount: Number(row['مبلغ']) || 0, date: row['تاریخ'] || todayJalali() }),
         reload: () => { txPage = 1; loadFinance(); }
     },
     assets: {
